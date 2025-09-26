@@ -20,10 +20,16 @@ jobs:
     strategy:
       matrix:
         VERSION: ["23.05", "24.10"]
-    if: matrix.VERSION == github.event.inputs.VERSION
+
     steps:
+      - name: Skip non-selected versions
+        if: ${{ matrix.VERSION != github.event.inputs.VERSION }}
+        run: |
+          echo "Skipping matrix.VERSION=${{ matrix.VERSION }}"
+          exit 0
+
       - name: Checkout FriendlyWrt scripts
-        uses: actions/checkout@v2
+        uses: actions/checkout@v5
         with:
           repository: friendlyarm/Actions-FriendlyWrt
           fetch-depth: 0
@@ -67,16 +73,22 @@ jobs:
     strategy:
       matrix:
         VERSION: ["23.05", "24.10"]
-    if: matrix.VERSION == github.event.inputs.VERSION
+
     steps:
+      - name: Skip non-selected versions
+        if: ${{ matrix.VERSION != github.event.inputs.VERSION }}
+        run: |
+          echo "Skipping matrix.VERSION=${{ matrix.VERSION }}"
+          exit 0
+
       - name: Checkout AmneziaWG
-        uses: actions/checkout@v2
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           path: amneziawg
 
       - name: Checkout FriendlyWrt
-        uses: actions/checkout@v2
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           path: friendlywrt
