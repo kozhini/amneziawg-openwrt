@@ -18,16 +18,15 @@ jobs:
     name: Build FriendlyWrt Toolchain
 
     steps:
-      - name: Checkout FriendlyWrt scripts
+      - name: Checkout FriendlyWrt
         uses: actions/checkout@v5
         with:
-          repository: friendlyarm/Actions-FriendlyWrt
-          path: friendlywrt
+          repository: friendlyarm/friendlywrt
+          path: friendlywrt/project
           fetch-depth: 0
 
-      - name: Prepare build environment
+      - name: Prepare environment
         run: |
-          sudo rm -rf /etc/apt/sources.list.d
           sudo apt-get update
           sudo apt-get install -y build-essential git wget ccache libncurses5-dev python3 python3-dev python3-setuptools subversion gawk unzip texinfo rsync
           sudo swapoff -a
@@ -36,28 +35,10 @@ jobs:
           mkdir -p friendlywrt/artifact
           echo "cores: $(nproc)"
 
-      - name: Download FriendlyWrt install script
+      - name: Initialize FriendlyWrt repo
         run: |
-          wget -O install.sh https://raw.githubusercontent.com/friendlyarm/build-env-on-ubuntu-bionic/master/install.sh
-          sed -i -e 's/^apt-get -y install openjdk-8-jdk/# apt-get -y install openjdk-8-jdk/g' install.sh
-          sed -i -e 's/^\[ -d fa-toolchain \]/# [ -d fa-toolchain ]/g' install.sh
-          sed -i -e 's/^(cat fa-toolchain/# (cat fa-toolchain/g' install.sh
-          sed -i -e 's/^(tar xf fa-toolchain/# (tar xf fa-toolchain/g' install.sh
-
-      - name: Run FriendlyWrt install script
-        run: |
-          sudo bash $PWD/install.sh
-          git clone https://github.com/friendlyarm/repo
-          sudo cp repo/repo /usr/bin/
-
-
-      - name: Download FriendlyWrt source
-        run: |
-          mkdir -p friendlywrt/project
           cd friendlywrt/project
-          repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests \
-            -b master-v${{ github.event.inputs.VERSION }} \
-            -m rk3399.xml --repo-url=https://github.com/friendlyarm/repo
+          repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests -b master-v${{ github.event.inputs.VERSION }} -m rk3399.xml --repo-url=https://github.com/friendlyarm/repo
           repo sync -c toolchain --no-clone-bundle
 
       - name: Build toolchain
