@@ -17,17 +17,8 @@ jobs:
   build_toolchain:
     name: Build FriendlyWrt Toolchain
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        VERSION: ["23.05", "24.10"]
 
     steps:
-      - name: Skip non-selected versions
-        if: ${{ matrix.VERSION != github.event.inputs.VERSION }}
-        run: |
-          echo "Skipping matrix.VERSION=${{ matrix.VERSION }}"
-          exit 0
-
       - name: Checkout FriendlyWrt scripts
         uses: actions/checkout@v5
         with:
@@ -36,20 +27,21 @@ jobs:
           path: friendlywrt
 
       - name: Initialize environment
+        working-directory: friendlywrt
         run: |
           sudo rm -rf /etc/apt/sources.list.d
-          bash friendlywrt/install.sh
+          bash install.sh
           sudo -E git config --global user.name 'GitHub Actions'
           sudo -E git config --global user.email 'noreply@github.com'
-          mkdir -p friendlywrt/artifact
+          mkdir -p artifact
           sudo swapoff -a
 
-      - name: Download source
+      - name: Download FriendlyWrt source
         run: |
           mkdir -p friendlywrt/project
           cd friendlywrt/project
           repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests \
-                    -b master-v${{ matrix.VERSION }} -m rk3399.xml --repo-url=https://github.com/friendlyarm/repo
+                    -b master-v${{ github.event.inputs.VERSION }} -m rk3399.xml --repo-url=https://github.com/friendlyarm/repo
           repo sync -c toolchain --no-clone-bundle
 
       - name: Build toolchain
@@ -60,7 +52,7 @@ jobs:
       - name: Cache toolchain
         uses: actions/cache@v3
         with:
-          key: fwrt-toolchain-${{ matrix.VERSION }}
+          key: fwrt-toolchain-${{ github.event.inputs.VERSION }}
           path: |
             friendlywrt/project/toolchain
             friendlywrt/project/staging_dir
@@ -70,17 +62,8 @@ jobs:
     name: Build AmneziaWG packages
     needs: build_toolchain
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        VERSION: ["23.05", "24.10"]
 
     steps:
-      - name: Skip non-selected versions
-        if: ${{ matrix.VERSION != github.event.inputs.VERSION }}
-        run: |
-          echo "Skipping matrix.VERSION=${{ matrix.VERSION }}"
-          exit 0
-
       - name: Checkout AmneziaWG
         uses: actions/checkout@v5
         with:
@@ -96,7 +79,7 @@ jobs:
       - name: Restore FriendlyWrt toolchain
         uses: actions/cache@v3
         with:
-          key: fwrt-toolchain-${{ matrix.VERSION }}
+          key: fwrt-toolchain-${{ github.event.inputs.VERSION }}
           path: |
             friendlywrt/project/toolchain
             friendlywrt/project/staging_dir
@@ -120,5 +103,5 @@ jobs:
       - name: Upload package artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: amneziawg-packages-${{ matrix.VERSION }}
+          name: amneziawg-packages-${{ github.event.inputs.VERSION }}
           path: artifact/amneziawg/
