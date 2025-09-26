@@ -19,17 +19,15 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        include:
-          - VERSION: "23.05"
-          - VERSION: "24.10"
+        VERSION: ["23.05", "24.10"]
     if: matrix.VERSION == github.event.inputs.VERSION
     steps:
       - name: Checkout FriendlyWrt scripts
-        uses: actions/checkout@v5
-        path: friendlywrt
+        uses: actions/checkout@v2
         with:
           repository: friendlyarm/Actions-FriendlyWrt
           fetch-depth: 0
+          path: friendlywrt
 
       - name: Initialize environment
         run: |
@@ -54,7 +52,7 @@ jobs:
           ./build.sh toolchain
 
       - name: Cache toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
           key: fwrt-toolchain-${{ matrix.VERSION }}
           path: |
@@ -68,21 +66,23 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        include:
-          - VERSION: "23.05"
-          - VERSION: "24.10"
+        VERSION: ["23.05", "24.10"]
     if: matrix.VERSION == github.event.inputs.VERSION
     steps:
       - name: Checkout AmneziaWG
-        uses: actions/checkout@v5
-        path: amneziawg
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          path: amneziawg
 
       - name: Checkout FriendlyWrt
-        uses: actions/checkout@v5
-        path: friendlywrt
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          path: friendlywrt
 
       - name: Restore FriendlyWrt toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
           key: fwrt-toolchain-${{ matrix.VERSION }}
           path: |
@@ -101,11 +101,12 @@ jobs:
       - name: Collect package artifacts
         run: |
           mkdir -p artifact/amneziawg
-          cp friendlywrt/project/bin/packages/*/*/*.{ipk,apk} artifact/amneziawg/ || true
+          cp friendlywrt/project/bin/packages/*/*/*.ipk artifact/amneziawg/ || true
+          cp friendlywrt/project/bin/packages/*/*/*.apk artifact/amneziawg/ || true
           cp friendlywrt/project/bin/targets/*/*/packages/kmod-amneziawg* artifact/amneziawg/ || true
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: amneziawg-packages-${{ matrix.VERSION }}
-          path: artifact/amneziawg/*
+          path: artifact/amneziawg/
