@@ -46,9 +46,10 @@ jobs:
 
       - name: Run FriendlyWrt install script
         run: |
-          bash install.sh
+          sudo bash $PWD/install.sh
           git clone https://github.com/friendlyarm/repo
           sudo cp repo/repo /usr/bin/
+
 
       - name: Download FriendlyWrt source
         run: |
