@@ -1,1 +1,115 @@
+name: FriendlyWrt + AmneziaWG packages
 
+on:
+  workflow_dispatch:
+    inputs:
+      VERSION:
+        description: "FriendlyWrt version"
+        type: choice
+        required: true
+        default: "23.05"
+        options:
+          - "23.05"
+          - "24.10"
+      SET:
+        description: "Build environment"
+        type: choice
+        required: true
+        default: "non-docker"
+        options:
+          - "docker"
+          - "non-docker"
+
+jobs:
+
+  build_toolchain:
+    name: Build FriendlyWrt Toolchain
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        VERSION: [${{ github.event.inputs.VERSION }}]
+        SET: [${{ github.event.inputs.SET }}]
+    steps:
+      - name: Checkout FriendlyWrt scripts
+        uses: actions/checkout@v5
+        path: friendlywrt
+        with:
+          repository: friendlyarm/Actions-FriendlyWrt
+          fetch-depth: 0
+
+      - name: Initialize environment
+        run: |
+          sudo rm -rf /etc/apt/sources.list.d
+          bash friendlywrt/install.sh
+          sudo -E git config --global user.name 'GitHub Actions'
+          sudo -E git config --global user.email 'noreply@github.com'
+          mkdir -p friendlywrt/artifact
+          sudo swapoff -a
+
+      - name: Download source
+        run: |
+          mkdir -p friendlywrt/project
+          cd friendlywrt/project
+          repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests \
+                    -b master-v${{ matrix.VERSION }} -m rk3399.xml --repo-url=https://github.com/friendlyarm/repo
+          repo sync -c toolchain --no-clone-bundle
+
+      - name: Build toolchain
+        run: |
+          cd friendlywrt/project
+          ./build.sh toolchain
+
+      - name: Cache toolchain
+        uses: actions/cache@v4
+        with:
+          key: fwrt-toolchain-${{ matrix.VERSION }}-${{ matrix.SET }}
+          path: |
+            friendlywrt/project/toolchain
+            friendlywrt/project/staging_dir
+            friendlywrt/project/build_dir
+
+  build_amneziawg_packages:
+    name: Build AmneziaWG packages
+    needs: build_toolchain
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        VERSION: [${{ github.event.inputs.VERSION }}]
+        SET: [${{ github.event.inputs.SET }}]
+    steps:
+      - name: Checkout AmneziaWG
+        uses: actions/checkout@v5
+        path: amneziawg
+
+      - name: Checkout FriendlyWrt
+        uses: actions/checkout@v5
+        path: friendlywrt
+
+      - name: Restore FriendlyWrt toolchain
+        uses: actions/cache@v4
+        with:
+          key: fwrt-toolchain-${{ matrix.VERSION }}-${{ matrix.SET }}
+          path: |
+            friendlywrt/project/toolchain
+            friendlywrt/project/staging_dir
+            friendlywrt/project/build_dir
+
+      - name: Build AmneziaWG packages
+        run: |
+          cd friendlywrt/project
+          make package/kmod-amneziawg/{clean,download,prepare,compile} -j$(nproc)
+          make package/amneziawg-go/{clean,download,prepare,compile} -j$(nproc)
+          make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j$(nproc)
+          make package/amneziawg-tools/{clean,download,prepare,compile} -j$(nproc)
+
+      - name: Collect package artifacts
+        run: |
+          mkdir -p artifact/amneziawg
+          cp friendlywrt/project/bin/packages/*/*/*.{ipk,apk} artifact/amneziawg/ || true
+          cp friendlywrt/project/bin/targets/*/*/packages/kmod-amneziawg* artifact/amneziawg/ || true
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: amneziawg-packages-${{ matrix.VERSION }}-${{ matrix.SET }}
+          path: artifact/amneziawg/*
