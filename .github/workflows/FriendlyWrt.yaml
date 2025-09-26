@@ -1,4 +1,4 @@
-name: FriendlyWrt + AmneziaWG packages
+name: Build AmneziaWG on FriendlyWrt Toolchain
 
 on:
   workflow_dispatch:
@@ -13,35 +13,50 @@ on:
           - "24.10"
 
 jobs:
-
   build_toolchain:
-    name: Build FriendlyWrt Toolchain
     runs-on: ubuntu-22.04
+    name: Build FriendlyWrt Toolchain
 
     steps:
       - name: Checkout FriendlyWrt scripts
         uses: actions/checkout@v5
         with:
           repository: friendlyarm/Actions-FriendlyWrt
-          fetch-depth: 0
           path: friendlywrt
+          fetch-depth: 0
 
-      - name: Initialize environment
-        working-directory: friendlywrt
+      - name: Prepare build environment
         run: |
           sudo rm -rf /etc/apt/sources.list.d
-          bash install.sh
+          sudo apt-get update
+          sudo apt-get install -y build-essential git wget ccache libncurses5-dev python3 python3-dev python3-setuptools subversion gawk unzip texinfo rsync
+          sudo swapoff -a
           sudo -E git config --global user.name 'GitHub Actions'
           sudo -E git config --global user.email 'noreply@github.com'
-          mkdir -p artifact
-          sudo swapoff -a
+          mkdir -p friendlywrt/artifact
+          echo "cores: $(nproc)"
+
+      - name: Download FriendlyWrt install script
+        run: |
+          wget -O install.sh https://raw.githubusercontent.com/friendlyarm/build-env-on-ubuntu-bionic/master/install.sh
+          sed -i -e 's/^apt-get -y install openjdk-8-jdk/# apt-get -y install openjdk-8-jdk/g' install.sh
+          sed -i -e 's/^\[ -d fa-toolchain \]/# [ -d fa-toolchain ]/g' install.sh
+          sed -i -e 's/^(cat fa-toolchain/# (cat fa-toolchain/g' install.sh
+          sed -i -e 's/^(tar xf fa-toolchain/# (tar xf fa-toolchain/g' install.sh
+
+      - name: Run FriendlyWrt install script
+        run: |
+          bash install.sh
+          git clone https://github.com/friendlyarm/repo
+          sudo cp repo/repo /usr/bin/
 
       - name: Download FriendlyWrt source
         run: |
           mkdir -p friendlywrt/project
           cd friendlywrt/project
           repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests \
-                    -b master-v${{ github.event.inputs.VERSION }} -m rk3399.xml --repo-url=https://github.com/friendlyarm/repo
+            -b master-v${{ github.event.inputs.VERSION }} \
+            -m rk3399.xml --repo-url=https://github.com/friendlyarm/repo
           repo sync -c toolchain --no-clone-bundle
 
       - name: Build toolchain
@@ -58,25 +73,19 @@ jobs:
             friendlywrt/project/staging_dir
             friendlywrt/project/build_dir
 
-  build_amneziawg_packages:
-    name: Build AmneziaWG packages
-    needs: build_toolchain
+  build_amneziawg:
     runs-on: ubuntu-22.04
+    needs: build_toolchain
+    name: Build AmneziaWG Packages
 
     steps:
       - name: Checkout AmneziaWG
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0
           path: amneziawg
-
-      - name: Checkout FriendlyWrt
-        uses: actions/checkout@v5
-        with:
           fetch-depth: 0
-          path: friendlywrt
 
-      - name: Restore FriendlyWrt toolchain
+      - name: Restore toolchain cache
         uses: actions/cache@v3
         with:
           key: fwrt-toolchain-${{ github.event.inputs.VERSION }}
@@ -93,14 +102,14 @@ jobs:
           make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j$(nproc)
           make package/amneziawg-tools/{clean,download,prepare,compile} -j$(nproc)
 
-      - name: Collect package artifacts
+      - name: Collect artifacts
         run: |
           mkdir -p artifact/amneziawg
           cp friendlywrt/project/bin/packages/*/*/*.ipk artifact/amneziawg/ || true
           cp friendlywrt/project/bin/packages/*/*/*.apk artifact/amneziawg/ || true
           cp friendlywrt/project/bin/targets/*/*/packages/kmod-amneziawg* artifact/amneziawg/ || true
 
-      - name: Upload package artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
           name: amneziawg-packages-${{ github.event.inputs.VERSION }}
