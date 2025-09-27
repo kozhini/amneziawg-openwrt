@@ -103,6 +103,16 @@ jobs:
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk /usr/local/share/boost /opt/ghc
         echo "Available cores: $(nproc)"
 
+        # --- NEW: Install Go 1.24.7 for AmneziaWG ---
+        GO_VERSION=1.24.7
+        wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz
+        sudo rm -rf /usr/local/go
+        sudo tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz
+        export PATH=/usr/local/go/bin:$PATH
+        go version
+
+        echo "Available cores: $(nproc)"
+
     - name: Download FriendlyWrt source
       run: |
         mkdir project
@@ -189,6 +199,11 @@ jobs:
       run: |
         cd project/friendlywrt
         echo "Building AmneziaWG packages..."
+        
+        # Use the newly installed Go
+        export GOTOOLCHAIN=local
+        export PATH=/usr/local/go/bin:$PATH
+
         make package/kmod-amneziawg/{clean,download,prepare,compile} -j$(nproc) || \
           make package/kmod-amneziawg/{clean,download,prepare,compile} -j1 V=s
         make package/amneziawg-go/{clean,download,prepare,compile} -j$(nproc) || \
@@ -197,6 +212,7 @@ jobs:
           make package/amneziawg-tools/{clean,download,prepare,compile} -j1 V=s
         make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j$(nproc) || \
           make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j1 V=s
+
 
     - name: Prepare artifacts
       id: prepare_artifacts
