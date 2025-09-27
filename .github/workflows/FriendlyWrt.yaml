@@ -152,8 +152,12 @@ jobs:
     - name: Configure build
       run: |
         cd project/friendlywrt
+        # Ограничиваемся Rockchip-платформой
+        echo "CONFIG_TARGET_rockchip=y" >> .config
+        echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
+
         if [[ "${{ matrix.target_cpu }}" == rk* ]]; then
-          cat >> .config <<EOF
+          cat >> .config <<'EOF'
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y
           CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y
@@ -161,8 +165,9 @@ jobs:
           CONFIG_PACKAGE_amneziawg-go=m
           CONFIG_PACKAGE_amneziawg-tools=m
           CONFIG_PACKAGE_luci-proto-amneziawg=m
-          EOF
+        EOF
         fi
+
         make defconfig
 
     - name: Download packages
