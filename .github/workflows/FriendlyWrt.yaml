@@ -152,16 +152,17 @@ jobs:
     - name: Configure build
       run: |
         cd project/friendlywrt
-        # Add AmneziaWG packages to config
-        cat >> .config <<EOF
-        CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y
-        CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y
-        CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y
-        CONFIG_PACKAGE_kmod-amneziawg=y
-        CONFIG_PACKAGE_amneziawg-go=y
-        CONFIG_PACKAGE_amneziawg-tools=y
-        CONFIG_PACKAGE_luci-proto-amneziawg=y
-        EOF
+        if [[ "${{ matrix.target_cpu }}" == rk* ]]; then
+          cat >> .config <<EOF
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y
+          CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y
+          CONFIG_PACKAGE_kmod-amneziawg=m
+          CONFIG_PACKAGE_amneziawg-go=m
+          CONFIG_PACKAGE_amneziawg-tools=m
+          CONFIG_PACKAGE_luci-proto-amneziawg=m
+          EOF
+        fi
         make defconfig
 
     - name: Download packages
