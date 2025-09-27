@@ -72,12 +72,12 @@ jobs:
 
     steps:
       - name: Checkout main repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
 
       - name: Checkout AmneziaWG repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: amneziawg
           ref: ${{ inputs.amneziawg_version }}
@@ -154,11 +154,9 @@ jobs:
           echo "TARGET_IMAGE_DIRNAME=friendlywrt$(echo ${{ inputs.friendlywrt_version }} | awk -F . '{print $1}')${SUFFIX}" >> $GITHUB_ENV
           echo "TARGET_FRIENDLYWRT_CONFIG=rockchip${SUFFIX}" >> $GITHUB_ENV
           
-          cat > .current_config.mk <<EOF
-device/friendlyelec/${{ matrix.target_cpu }}/base.mk
-TARGET_IMAGE_DIRNAME=${{ env.TARGET_IMAGE_DIRNAME }}
-TARGET_FRIENDLYWRT_CONFIG=${{ env.TARGET_FRIENDLYWRT_CONFIG }}
-EOF
+          echo "device/friendlyelec/${{ matrix.target_cpu }}/base.mk" > .current_config.mk
+          echo "TARGET_IMAGE_DIRNAME=${{ env.TARGET_IMAGE_DIRNAME }}" >> .current_config.mk
+          echo "TARGET_FRIENDLYWRT_CONFIG=${{ env.TARGET_FRIENDLYWRT_CONFIG }}" >> .current_config.mk
 
       - name: Apply customizations and update feeds
         run: |
