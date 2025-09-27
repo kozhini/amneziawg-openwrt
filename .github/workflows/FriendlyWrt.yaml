@@ -21,7 +21,7 @@ jobs:
       - name: Checkout FriendlyWrt
         uses: actions/checkout@v5
         with:
-          repository: friendlyarm/friendlywrt
+          repository: friendlyarm/Actions-FriendlyWrt
           path: friendlywrt/project
           fetch-depth: 0
 
