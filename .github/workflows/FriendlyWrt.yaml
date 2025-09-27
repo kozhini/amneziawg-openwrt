@@ -144,6 +144,9 @@ jobs:
           cd project/friendlywrt
           echo "CONFIG_TARGET_rockchip=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
+          # Включаем поддержку Chacha20 и NEON в ядре
+          echo "CONFIG_CRYPTO_CHACHA20=y" >> .config
+          echo "CONFIG_CRYPTO_CHACHA20_NEON=y" >> .config
           if [[ "${{ matrix.target_cpu }}" == rk* ]]; then
             echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> .config
             echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> .config
