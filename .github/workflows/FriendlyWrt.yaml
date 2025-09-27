@@ -74,12 +74,11 @@ jobs:
     - name: Checkout
       uses: actions/checkout@main
 
-    - name: Checkout AmneziaWG repository
+    - name: Checkout AWG repository
       uses: actions/checkout@v5
       with:
-        repository: amnezia-suite/amneziawg-linux-kernel-module
+        path: amneziawg
         ref: ${{ inputs.amneziawg_version }}
-        path: amneziawg-sources
         fetch-depth: 0
 
     - name: Initialize environment
@@ -123,7 +122,7 @@ jobs:
         cd project
         # Create AmneziaWG feed directory
         mkdir -p amneziawg-feed
-        cp -r ../amneziawg-sources/* amneziawg-feed/
+        cp -r ../amneziawg/* amneziawg-feed/
         # Add AmneziaWG feed to feeds.conf.default
         echo "src-cpy amneziawg ../amneziawg-feed" >> friendlywrt/feeds.conf.default
 
