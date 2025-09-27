@@ -144,11 +144,12 @@ jobs:
           cd project/friendlywrt
           echo "CONFIG_TARGET_rockchip=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
-          echo "CONFIG_CRYPTO_CHACHA20=y" >> .config
-          echo "CONFIG_CRYPTO_CHACHA20_NEON=y" >> .config
-          # echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> .config
+          echo "CONFIG_CRYPTO_CHACHA20=m" >> .config
+          echo "CONFIG_CRYPTO_CHACHA20_NEON=m" >> .config
+          echo "CONFIG_CRYPTO_CHACHA20_POLY1305=m >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> .config
           echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> .config
-          echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> .config
+          # echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> .config
           echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> .config
           echo "CONFIG_PACKAGE_amneziawg-go=m" >> .config
           echo "CONFIG_PACKAGE_amneziawg-tools=m" >> .config
