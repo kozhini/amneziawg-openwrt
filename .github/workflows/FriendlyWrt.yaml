@@ -34,6 +34,8 @@ on:
 jobs:
   prepare_release:
     runs-on: ubuntu-22.04
+    outputs:
+      release_tag: ${{ steps.release_tag.outputs.release_tag }}
     steps:
       - name: Get release tag
         id: release_tag
@@ -41,15 +43,14 @@ jobs:
           release_tag="AmneziaWG-FriendlyWrt-$(date +%Y-%m-%d-%H%M)"
           echo "release_tag=$release_tag" >> $GITHUB_OUTPUT
 
-      - name: Create empty release
-        id: release
-        uses: softprops/action-gh-release@v1
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.release_tag.outputs.release_tag }}
           name: "AmneziaWG for FriendlyWrt ${{ inputs.friendlywrt_version }} - ${{ steps.release_tag.outputs.release_tag }}"
-          draft: false
+          draft: true
           prerelease: false
 
   build_amneziawg:
@@ -62,12 +63,12 @@ jobs:
 
     steps:
       - name: Checkout main repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
 
       - name: Checkout AmneziaWG repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: amneziawg
           ref: ${{ inputs.amneziawg_version }}
@@ -89,7 +90,7 @@ jobs:
           sudo -E bash ./install.sh
 
           # Install Go
-          GO_VERSION=1.24.7
+          GO_VERSION=1.24.7 # Consider updating Go version periodically
           wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz
           sudo rm -rf /usr/local/go
           sudo tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz
@@ -110,7 +111,7 @@ jobs:
           mkdir project
           cd project
           repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests -b master-v${{ inputs.friendlywrt_version }} \
-                   -m ${{ matrix.target_cpu }}.xml --repo-url=https://github.com/friendlyarm/repo --no-clone-bundle
+                    -m ${{ matrix.target_cpu }}.xml --repo-url=https://github.com/friendlyarm/repo --no-clone-bundle
           repo sync -c friendlywrt configs device/common device/friendlyelec scripts toolchain --no-clone-bundle
 
       - name: Setup AmneziaWG feed and config
@@ -120,9 +121,8 @@ jobs:
           cp -r ../amneziawg/* amneziawg-feed/
           echo "src-cpy amneziawg ../amneziawg-feed" >> friendlywrt/feeds.conf.default
 
-          SUFFIX=""
-          TARGET_IMAGE_DIRNAME=friendlywrt$(echo ${{ inputs.friendlywrt_version }} | awk -F . '{print $1}')${SUFFIX}
-          TARGET_FRIENDLYWRT_CONFIG=rockchip${SUFFIX}
+          TARGET_IMAGE_DIRNAME=friendlywrt$(echo ${{ inputs.friendlywrt_version }} | awk -F . '{print $1}')
+          TARGET_FRIENDLYWRT_CONFIG=rockchip
           echo "TARGET_IMAGE_DIRNAME=$TARGET_IMAGE_DIRNAME" >> $GITHUB_ENV
           echo "TARGET_FRIENDLYWRT_CONFIG=$TARGET_FRIENDLYWRT_CONFIG" >> $GITHUB_ENV
 
@@ -147,15 +147,14 @@ jobs:
           # Включаем поддержку Chacha20 и NEON в ядре
           echo "CONFIG_CRYPTO_CHACHA20=y" >> .config
           echo "CONFIG_CRYPTO_CHACHA20_NEON=y" >> .config
-          if [[ "${{ matrix.target_cpu }}" == rk* ]]; then
-            echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> .config
-            echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> .config
-            echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> .config
-            echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> .config
-            echo "CONFIG_PACKAGE_amneziawg-go=m" >> .config
-            echo "CONFIG_PACKAGE_amneziawg-tools=m" >> .config
-            echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> .config
-          fi
+          # ИЗМЕНЕНИЕ: Удалена избыточная проверка if, т.к. все цели - rockchip
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> .config
+          echo "CONFIG_PACKAGE_amneziawg-go=m" >> .config
+          echo "CONFIG_PACKAGE_amneziawg-tools=m" >> .config
+          echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> .config
           make defconfig
 
       - name: Download packages
@@ -207,10 +206,10 @@ jobs:
           find "bin/packages/${ARCH}" -name '*amneziawg*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
           find "bin/packages/${ARCH}" -name 'luci-proto-amneziawg*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
 
-      - name: Upload artifacts
-        uses: softprops/action-gh-release@v1
+      - name: Upload artifacts to draft release
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.prepare_release.outputs.release_tag }}
+          tag_name: ${{ needs.prepare_release.outputs.release_tag }} # <-- ИЗМЕНЕНИЕ: Теперь эта ссылка работает правильно
           files: artifact/amneziawg-packages/${{ matrix.target_cpu }}/*
