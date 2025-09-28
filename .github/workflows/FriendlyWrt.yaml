@@ -26,6 +26,7 @@ on:
           - "rk3399"
           - "rk3566"
           - "rk3568"
+          - "rk3576"
           - "rk3588"
 jobs:
   prepare_release:
@@ -144,15 +145,16 @@ jobs:
         run: |
           cd project/friendlywrt
           
-          # Start with a clean config and set the basic target
+          # Set the correct target and subtarget before running defconfig
+          echo "CONFIG_TARGET_rockchip=y" > .config
+          echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
+          echo "CONFIG_TARGET_BOARD=\"rockchip\"" >> .config
+          echo "CONFIG_TARGET_SUBTARGET=\"armv8\"" >> .config
+          
           make defconfig
           
           # Append the package and crypto configuration to the .config file directly
           cat >> .config << EOF
-          # Explicitly set the target and subtarget to avoid confusion
-          CONFIG_TARGET_rockchip=y
-          CONFIG_TARGET_rockchip_armv8=y
-          
           # Enable AmneziaWG and its packages
           CONFIG_PACKAGE_kmod-amneziawg=m
           CONFIG_PACKAGE_amneziawg-go=m
@@ -164,11 +166,12 @@ jobs:
           CONFIG_CRYPTO_CHACHA20=m
           CONFIG_CRYPTO_CHACHA20POLY1305=m
           CONFIG_CRYPTO_POLY1305=m
+
           
-          ## ARM64 NEON optimizations
+          # ARM64 NEON optimizations
           CONFIG_CRYPTO_CHACHA20_NEON=m
           CONFIG_CRYPTO_POLY1305_NEON=m
-          #CONFIG_CRYPTO_CURVE25519_NEON=m
+
           
           # Kernel module packages for the crypto primitives
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
