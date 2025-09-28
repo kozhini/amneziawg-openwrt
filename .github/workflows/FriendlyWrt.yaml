@@ -178,6 +178,9 @@ jobs:
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
           CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
+          CONFIG_PACKAGE_kmod-crypto-curve25519=m
+          CONFIG_PACKAGE_kmod-crypto-blake2s=m
+          CONFIG_PACKAGE_kmod-crypto-kpp=m
           EOF
           
           # Re-run defconfig to resolve dependencies and conflicts
@@ -188,6 +191,15 @@ jobs:
           cd project/friendlywrt
           make download -j$(nproc)
           find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
+      - name: Clone kernel source manually
+        run: |
+          cd project/friendlywrt
+          KERNEL_VERSION=$(grep 'KERNEL_PATCHVER:=' include/kernel-defaults.mk | cut -d'.' -f1-3)
+          TARGET_DIR="build_dir/target-aarch64_generic_musl/linux-rockchip_armv8/linux-${KERNEL_VERSION}"
+          echo "Cloning kernel-rockchip v${KERNEL_VERSION} into: ${TARGET_DIR}"
+          mkdir -p ${TARGET_DIR}
+          git clone --depth 1 https://github.com/friendlyarm/kernel-rockchip.git --branch nanopi6-v6.1.y ${TARGET_DIR}
+          
       - name: Verify kernel source and architecture
         run: |
           cd project/friendlywrt
@@ -214,4 +226,49 @@ jobs:
             rk3328|rk3528)
               ARCH="aarch64_cortex-a53"
               ;;
-            rk3399|rk3
+            rk3399|rk3576)
+              ARCH="aarch64_cortex-a72_cortex-a53"
+              ;;
+            rk3566|rk3568)
+              ARCH="aarch64_cortex-a55"
+              ;;
+            rk3588)
+              ARCH="aarch64_cortex-a76_cortex-a55"
+              ;;
+            *)
+              ARCH="aarch64_generic"
+              ;;
+          esac
+          
+          echo "Looking for packages in architecture: $ARCH"
+          find bin -name "*amneziawg*" -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
+          find bin -name "kmod-crypto-*.ipk" -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
+          
+          echo "Found packages:"
+          ls -la "${ARTIFACT_DIR}" || echo "No packages found"
+          
+          cat > "${ARTIFACT_DIR}/INSTALL.txt" << 'EOF'
+          Installation instructions for AmneziaWG on FriendlyWrt:
+          
+          1. Install crypto dependencies first (if needed):
+             opkg install kmod-crypto-*.ipk
+          
+          2. Install AmneziaWG kernel module:
+             opkg install kmod-amneziawg_*.ipk
+          
+          3. Install AmneziaWG tools:
+             opkg install amneziawg-tools_*.ipk
+             opkg install amneziawg-go_*.ipk
+          
+          4. Install LuCI interface (optional):
+             opkg install luci-proto-amneziawg_*.ipk
+          
+          5. Reboot the router after installation
+          EOF
+      - name: Upload artifacts to draft release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.prepare_release.outputs.release_tag }}
+          files: artifact/amneziawg-packages/${{ matrix.target_cpu }}/*
