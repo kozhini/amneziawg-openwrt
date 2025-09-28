@@ -23,11 +23,9 @@ on:
         options:
           - ""
           - "rk3328"
-          - "rk3528"
           - "rk3399"
           - "rk3566"
           - "rk3568"
-          - "rk3576"
           - "rk3588"
 jobs:
   prepare_release:
@@ -149,21 +147,16 @@ jobs:
           # Start with a clean config and set the basic target
           make defconfig
           
-          # Enable AmneziaWG and its kernel module, which should pull in dependencies
-          sed -i 's/^# CONFIG_PACKAGE_kmod-amneziawg is not set/CONFIG_PACKAGE_kmod-amneziawg=m/' .config
-          sed -i 's/^# CONFIG_PACKAGE_amneziawg-go is not set/CONFIG_PACKAGE_amneziawg-go=m/' .config
-          sed -i 's/^# CONFIG_PACKAGE_amneziawg-tools is not set/CONFIG_PACKAGE_amneziawg-tools=m/' .config
-          sed -i 's/^# CONFIG_PACKAGE_luci-proto-amneziawg is not set/CONFIG_PACKAGE_luci-proto-amneziawg=m/' .config
-          
-          # Explicitly configure kernel crypto modules as per Kbuild.include
-          # This is the most reliable way to prevent the "missing module" error
-          ./scripts/diffconfig.sh > diff.config
-          
-          cat >> diff.config << EOF
-          # Ensure crypto is enabled
-          CONFIG_CRYPTO=y
+          # Append the package and crypto configuration to the .config file directly
+          cat >> .config << EOF
+          # Enable AmneziaWG and its packages
+          CONFIG_PACKAGE_kmod-amneziawg=m
+          CONFIG_PACKAGE_amneziawg-go=m
+          CONFIG_PACKAGE_amneziawg-tools=m
+          CONFIG_PACKAGE_luci-proto-amneziawg=m
           
           # Required primitives from amneziawg-linux-kernel-module/src/crypto/Kbuild.include
+          CONFIG_CRYPTO=y
           CONFIG_CRYPTO_BLAKE2S=m
           CONFIG_CRYPTO_CHACHA20=m
           CONFIG_CRYPTO_CHACHA20POLY1305=m
@@ -185,7 +178,7 @@ jobs:
           CONFIG_PACKAGE_kmod-crypto-kpp=m
           EOF
           
-          ./scripts/merge_config.sh .config diff.config
+          # Re-run defconfig to resolve dependencies and conflicts
           make defconfig
           
       - name: Download packages
