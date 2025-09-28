@@ -144,18 +144,20 @@ jobs:
           cd project/friendlywrt
           echo "CONFIG_TARGET_rockchip=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
+          # криптография — встроено в ядро
           echo "CONFIG_CRYPTO_CHACHA20=y" >> .config
           echo "CONFIG_CRYPTO_CHACHA20_NEON=y" >> .config
-          # echo "CONFIG_CRYPTO_POLY1305=y" >> .config
-          # echo "CONFIG_CRYPTO_CHACHA20POLY1305=y" >> .config
-          # echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> .config
+          echo "CONFIG_CRYPTO_POLY1305=y" >> .config
+          echo "CONFIG_CRYPTO_CHACHA20POLY1305=y" >> .config
+          # пакеты для AmneziaWG
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> .config
           echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> .config
           echo "CONFIG_PACKAGE_amneziawg-go=m" >> .config
           echo "CONFIG_PACKAGE_amneziawg-tools=m" >> .config
           echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> .config
           make defconfig
+
 
       - name: Download packages
         run: |
