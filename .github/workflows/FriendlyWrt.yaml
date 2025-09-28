@@ -141,18 +141,6 @@ jobs:
           fi
           
           ./scripts/feeds install -a
-      - name: Verify kernel source and architecture
-        run: |
-          cd project/friendlywrt
-          KERNEL_PATH=$(find build_dir/target-* -maxdepth 1 -type d -name "linux-*")
-          if [ -d "${KERNEL_PATH}/arch/arm64/crypto" ]; then
-            echo "✅ Verified: 'arch/arm64/crypto' directory exists."
-            echo "Available crypto files:"
-            ls -F ${KERNEL_PATH}/arch/arm64/crypto || true
-          else
-            echo "❌ Error: 'arch/arm64/crypto' directory not found. The build target may be incorrect or the kernel source is incomplete."
-            exit 1
-          fi
       - name: Configure build
         run: |
           cd project/friendlywrt
@@ -190,9 +178,6 @@ jobs:
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
           CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
-          CONFIG_PACKAGE_kmod-crypto-curve25519=m
-          CONFIG_PACKAGE_kmod-crypto-blake2s=m
-          CONFIG_PACKAGE_kmod-crypto-kpp=m
           EOF
           
           # Re-run defconfig to resolve dependencies and conflicts
@@ -203,6 +188,18 @@ jobs:
           cd project/friendlywrt
           make download -j$(nproc)
           find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
+      - name: Verify kernel source and architecture
+        run: |
+          cd project/friendlywrt
+          KERNEL_PATH=$(find build_dir/target-* -maxdepth 1 -type d -name "linux-*")
+          if [ -d "${KERNEL_PATH}/arch/arm64/crypto" ]; then
+            echo "✅ Verified: 'arch/arm64/crypto' directory exists."
+            echo "Available crypto files:"
+            ls -F ${KERNEL_PATH}/arch/arm64/crypto || true
+          else
+            echo "❌ Error: 'arch/arm64/crypto' directory not found. The build target may be incorrect or the kernel source is incomplete."
+            exit 1
+          fi
       - name: Build all packages
         run: |
           cd project/friendlywrt
@@ -217,49 +214,4 @@ jobs:
             rk3328|rk3528)
               ARCH="aarch64_cortex-a53"
               ;;
-            rk3399|rk3576)
-              ARCH="aarch64_cortex-a72_cortex-a53"
-              ;;
-            rk3566|rk3568)
-              ARCH="aarch64_cortex-a55"
-              ;;
-            rk3588)
-              ARCH="aarch64_cortex-a76_cortex-a55"
-              ;;
-            *)
-              ARCH="aarch64_generic"
-              ;;
-          esac
-          
-          echo "Looking for packages in architecture: $ARCH"
-          find bin -name "*amneziawg*" -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          find bin -name "kmod-crypto-*.ipk" -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          
-          echo "Found packages:"
-          ls -la "${ARTIFACT_DIR}" || echo "No packages found"
-          
-          cat > "${ARTIFACT_DIR}/INSTALL.txt" << 'EOF'
-          Installation instructions for AmneziaWG on FriendlyWrt:
-          
-          1. Install crypto dependencies first (if needed):
-             opkg install kmod-crypto-*.ipk
-          
-          2. Install AmneziaWG kernel module:
-             opkg install kmod-amneziawg_*.ipk
-          
-          3. Install AmneziaWG tools:
-             opkg install amneziawg-tools_*.ipk
-             opkg install amneziawg-go_*.ipk
-          
-          4. Install LuCI interface (optional):
-             opkg install luci-proto-amneziawg_*.ipk
-          
-          5. Reboot the router after installation
-          EOF
-      - name: Upload artifacts to draft release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ needs.prepare_release.outputs.release_tag }}
-          files: artifact/amneziawg-packages/${{ matrix.target_cpu }}/*
+            rk3399|rk3
