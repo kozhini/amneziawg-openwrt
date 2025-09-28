@@ -1,5 +1,4 @@
 name: Build AmneziaWG for FriendlyWrt
-
 on:
   workflow_dispatch:
     inputs:
@@ -30,7 +29,6 @@ on:
           - "rk3568"
           - "rk3576"
           - "rk3588"
-
 jobs:
   prepare_release:
     runs-on: ubuntu-22.04
@@ -51,7 +49,6 @@ jobs:
           name: "AmneziaWG for FriendlyWrt ${{ inputs.friendlywrt_version }} - ${{ steps.release_tag.outputs.release_tag }}"
           draft: true
           prerelease: false
-
   build_amneziawg:
     needs: prepare_release
     runs-on: ubuntu-22.04
@@ -59,13 +56,11 @@ jobs:
       matrix:
         target_cpu: ${{ inputs.target_cpu && fromJson(format('["{0}"]', inputs.target_cpu)) || fromJson('["rk3328","rk3399","rk3566","rk3568","rk3588"]') }}
       fail-fast: false
-
     steps:
       - name: Checkout main repository
         uses: actions/checkout@v5
         with:
           submodules: true
-
       - name: Checkout AmneziaWG OpenWRT repository
         uses: actions/checkout@v5
         with:
@@ -73,7 +68,6 @@ jobs:
           path: amneziawg-openwrt
           ref: ${{ inputs.amneziawg_version }}
           fetch-depth: 0
-
       - name: Initialize build environment
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -105,7 +99,6 @@ jobs:
           # Install repo tool
           git clone https://github.com/friendlyarm/repo
           sudo cp repo/repo /usr/bin/
-
       - name: Download FriendlyWrt source
         run: |
           mkdir project
@@ -113,7 +106,6 @@ jobs:
           repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests -b master-v${{ inputs.friendlywrt_version }} \
                     -m ${{ matrix.target_cpu }}.xml --repo-url=https://github.com/friendlyarm/repo --no-clone-bundle
           repo sync -c friendlywrt configs device/common device/friendlyelec scripts toolchain --no-clone-bundle
-
       - name: Setup AmneziaWG feed and config
         run: |
           cd project
@@ -128,7 +120,6 @@ jobs:
           echo "device/friendlyelec/${{ matrix.target_cpu }}/base.mk" > .current_config.mk
           echo "TARGET_IMAGE_DIRNAME=$TARGET_IMAGE_DIRNAME" >> .current_config.mk
           echo "TARGET_FRIENDLYWRT_CONFIG=$TARGET_FRIENDLYWRT_CONFIG" >> .current_config.mk
-
       - name: Apply customizations and update feeds
         run: |
           cd project
@@ -137,118 +128,61 @@ jobs:
           cd friendlywrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-
-      - name: Configure build with proper crypto dependencies
+      - name: Configure build
         run: |
           cd project/friendlywrt
           
-          # Target configuration
-          echo "CONFIG_TARGET_rockchip=y" >> .config
-          echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
-          
-          # Kernel crypto subsystem (built-in для core crypto)
-          echo "CONFIG_CRYPTO=y" >> .config
-          echo "CONFIG_CRYPTO_ALGAPI=y" >> .config
-          echo "CONFIG_CRYPTO_ALGAPI2=y" >> .config
-          echo "CONFIG_CRYPTO_AEAD=y" >> .config
-          echo "CONFIG_CRYPTO_AEAD2=y" >> .config
-          echo "CONFIG_CRYPTO_SKCIPHER=y" >> .config
-          echo "CONFIG_CRYPTO_SKCIPHER2=y" >> .config
-          echo "CONFIG_CRYPTO_HASH=y" >> .config
-          echo "CONFIG_CRYPTO_HASH2=y" >> .config
-          echo "CONFIG_CRYPTO_RNG2=y" >> .config
-          echo "CONFIG_CRYPTO_AKCIPHER2=y" >> .config
-          echo "CONFIG_CRYPTO_KPP2=y" >> .config
-          echo "CONFIG_CRYPTO_ACOMP2=y" >> .config
-          
-          # Core crypto algorithms (модули для возможности загрузки/выгрузки)
-          echo "CONFIG_CRYPTO_CHACHA20=m" >> .config
-          echo "CONFIG_CRYPTO_POLY1305=m" >> .config
-          echo "CONFIG_CRYPTO_CHACHA20POLY1305=m" >> .config
-          echo "CONFIG_CRYPTO_CURVE25519=m" >> .config
-          echo "CONFIG_CRYPTO_BLAKE2S=m" >> .config
-          
-          # Отключаем проблемные NEON-optimized версии
-          echo "# CONFIG_CRYPTO_CHACHA20_NEON is not set" >> .config
-          echo "# CONFIG_CRYPTO_POLY1305_NEON is not set" >> .config
-          echo "# CONFIG_CRYPTO_NHPOLY1305_NEON is not set" >> .config
-          
-          # Additional required crypto modules  
-          echo "CONFIG_CRYPTO_LIB_CHACHA20POLY1305=m" >> .config
-          echo "CONFIG_CRYPTO_LIB_CURVE25519=m" >> .config
-          echo "CONFIG_CRYPTO_LIB_POLY1305=m" >> .config
-          echo "CONFIG_CRYPTO_LIB_CHACHA=m" >> .config
-          
-          # Отключаем kmod пакеты которые зависят от NEON
-          echo "# CONFIG_PACKAGE_kmod-crypto-lib-chacha20 is not set" >> .config
-          echo "# CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305 is not set" >> .config  
-          echo "# CONFIG_PACKAGE_kmod-crypto-chacha20poly1305 is not set" >> .config
-          
-          # Оставляем только базовые crypto модули
-          echo "CONFIG_PACKAGE_kmod-crypto-curve25519=m" >> .config
-          echo "CONFIG_PACKAGE_kmod-crypto-blake2s=m" >> .config
-          echo "CONFIG_PACKAGE_kmod-crypto-kpp=m" >> .config
-          
-          # AmneziaWG packages
-          echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> .config
-          echo "CONFIG_PACKAGE_amneziawg-go=m" >> .config
-          echo "CONFIG_PACKAGE_amneziawg-tools=m" >> .config
-          echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> .config
-          
+          # Start with a clean config and set the basic target
           make defconfig
-
+          
+          # Enable AmneziaWG and its kernel module, which should pull in dependencies
+          sed -i 's/^# CONFIG_PACKAGE_kmod-amneziawg is not set/CONFIG_PACKAGE_kmod-amneziawg=m/' .config
+          sed -i 's/^# CONFIG_PACKAGE_amneziawg-go is not set/CONFIG_PACKAGE_amneziawg-go=m/' .config
+          sed -i 's/^# CONFIG_PACKAGE_amneziawg-tools is not set/CONFIG_PACKAGE_amneziawg-tools=m/' .config
+          sed -i 's/^# CONFIG_PACKAGE_luci-proto-amneziawg is not set/CONFIG_PACKAGE_luci-proto-amneziawg=m/' .config
+          
+          # Explicitly configure kernel crypto modules as per Kbuild.include
+          # This is the most reliable way to prevent the "missing module" error
+          ./scripts/diffconfig.sh > diff.config
+          
+          cat >> diff.config << EOF
+          # Ensure crypto is enabled
+          CONFIG_CRYPTO=y
+          
+          # Required primitives from amneziawg-linux-kernel-module/src/crypto/Kbuild.include
+          CONFIG_CRYPTO_BLAKE2S=m
+          CONFIG_CRYPTO_CHACHA20=m
+          CONFIG_CRYPTO_CHACHA20POLY1305=m
+          CONFIG_CRYPTO_POLY1305=m
+          CONFIG_CRYPTO_CURVE25519=m
+          
+          # ARM64 NEON optimizations
+          CONFIG_CRYPTO_CHACHA20_NEON=m
+          CONFIG_CRYPTO_POLY1305_NEON=m
+          CONFIG_CRYPTO_CURVE25519_NEON=m
+          CONFIG_CRYPTO_BLAKE2S_ARM64=m
+          
+          # Kernel module packages for the crypto primitives
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
+          CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
+          CONFIG_PACKAGE_kmod-crypto-curve25519=m
+          CONFIG_PACKAGE_kmod-crypto-blake2s=m
+          CONFIG_PACKAGE_kmod-crypto-kpp=m
+          EOF
+          
+          ./scripts/merge_config.sh .config diff.config
+          make defconfig
+          
       - name: Download packages
         run: |
           cd project/friendlywrt
           make download -j$(nproc)
           find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
-
-      - name: Build toolchain
+      - name: Build all packages
         run: |
           cd project/friendlywrt
-          make tools/install -j$(nproc)
-          make toolchain/install -j$(nproc)
-
-      - name: Build kernel with crypto modules
-        run: |
-          cd project/friendlywrt
-          make target/linux/prepare -j$(nproc)
-          make target/linux/compile -j$(nproc)
-
-      - name: Build crypto dependency packages first
-        run: |
-          cd project/friendlywrt
-          echo "Building crypto dependency packages..."
-          make package/kernel/linux/compile -j$(nproc) || make package/kernel/linux/compile -j1 V=s
-
-      - name: Verify crypto modules availability
-        run: |
-          cd project/friendlywrt
-          echo "Checking available crypto packages..."
-          find bin -name "*crypto*" -type f || echo "No crypto packages found yet"
-          
-          KERNEL_BUILD_DIR=$(find build_dir/target-*/linux-rockchip_armv8 -name "linux-*" -type d | head -1)
-          echo "Kernel build directory: $KERNEL_BUILD_DIR"
-          if [ -d "$KERNEL_BUILD_DIR" ]; then
-            echo "Available crypto kernel modules:"
-            find "$KERNEL_BUILD_DIR" -name "*.ko" | grep -E "(chacha|poly|curve|blake)" || echo "Crypto modules not found"
-          fi
-
-      - name: Compile AmneziaWG packages
-        run: |
-          cd project/friendlywrt
-          echo "Building AmneziaWG kernel module..."
-          make package/kmod-amneziawg/{clean,download,prepare,compile} -j$(nproc) || make package/kmod-amneziawg/{clean,download,prepare,compile} -j1 V=s
-          
-          echo "Building AmneziaWG Go tools..."
-          make package/amneziawg-go/{clean,download,prepare,compile} -j$(nproc) || make package/amneziawg-go/{clean,download,prepare,compile} -j1 V=s
-          
-          echo "Building AmneziaWG userspace tools..."
-          make package/amneziawg-tools/{clean,download,prepare,compile} -j$(nproc) || make package/amneziawg-tools/{clean,download,prepare,compile} -j1 V=s
-          
-          echo "Building LuCI proto..."
-          make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j$(nproc) || make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j1 V=s
-
+          make -j$(nproc) || make -j1 V=s
       - name: Prepare artifacts
         run: |
           cd project/friendlywrt
@@ -274,27 +208,12 @@ jobs:
           esac
           
           echo "Looking for packages in architecture: $ARCH"
-          echo "Searching in directories:"
-          find bin -type d -name "*$ARCH*" || echo "No arch-specific directories found"
-          find bin/targets -name "*amneziawg*" -o -name "kmod-amneziawg*" || echo "No target packages found"
-          find bin/packages -name "*amneziawg*" || echo "No feed packages found"
-          
-          # Копируем пакеты AmneziaWG
-          find "bin/targets" -name 'kmod-amneziawg*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          find "bin/packages" -name '*amneziawg*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          find "bin/packages" -name 'luci-proto-amneziawg*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          
-          # Копируем необходимые crypto зависимости
-          find "bin/targets" -name 'kmod-crypto-*chacha*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          find "bin/targets" -name 'kmod-crypto-*poly*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          find "bin/targets" -name 'kmod-crypto-*curve*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          find "bin/targets" -name 'kmod-crypto-*blake*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          find "bin/targets" -name 'kmod-crypto-kpp*' -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
+          find bin -name "*amneziawg*" -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
+          find bin -name "kmod-crypto-*.ipk" -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
           
           echo "Found packages:"
           ls -la "${ARTIFACT_DIR}" || echo "No packages found"
           
-          # Создаем файл с инструкциями по установке
           cat > "${ARTIFACT_DIR}/INSTALL.txt" << 'EOF'
           Installation instructions for AmneziaWG on FriendlyWrt:
           
@@ -313,7 +232,6 @@ jobs:
           
           5. Reboot the router after installation
           EOF
-
       - name: Upload artifacts to draft release
         uses: softprops/action-gh-release@v2
         env:
