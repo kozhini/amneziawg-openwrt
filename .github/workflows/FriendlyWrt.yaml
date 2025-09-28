@@ -168,9 +168,10 @@ jobs:
           echo "CONFIG_CRYPTO_CURVE25519=m" >> .config
           echo "CONFIG_CRYPTO_BLAKE2S=m" >> .config
           
-          # ARM64-specific optimizations (как модули с fallback)
-          echo "CONFIG_CRYPTO_CHACHA20_NEON=m" >> .config
-          echo "CONFIG_CRYPTO_POLY1305_NEON=m" >> .config
+          # Отключаем проблемные NEON-optimized версии
+          echo "# CONFIG_CRYPTO_CHACHA20_NEON is not set" >> .config
+          echo "# CONFIG_CRYPTO_POLY1305_NEON is not set" >> .config
+          echo "# CONFIG_CRYPTO_NHPOLY1305_NEON is not set" >> .config
           
           # Additional required crypto modules  
           echo "CONFIG_CRYPTO_LIB_CHACHA20POLY1305=m" >> .config
@@ -178,10 +179,12 @@ jobs:
           echo "CONFIG_CRYPTO_LIB_POLY1305=m" >> .config
           echo "CONFIG_CRYPTO_LIB_CHACHA=m" >> .config
           
-          # Kernel module packages (OpenWRT пакеты для управления модулями)
-          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> .config
-          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> .config  
-          echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> .config
+          # Отключаем kmod пакеты которые зависят от NEON
+          echo "# CONFIG_PACKAGE_kmod-crypto-lib-chacha20 is not set" >> .config
+          echo "# CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305 is not set" >> .config  
+          echo "# CONFIG_PACKAGE_kmod-crypto-chacha20poly1305 is not set" >> .config
+          
+          # Оставляем только базовые crypto модули
           echo "CONFIG_PACKAGE_kmod-crypto-curve25519=m" >> .config
           echo "CONFIG_PACKAGE_kmod-crypto-blake2s=m" >> .config
           echo "CONFIG_PACKAGE_kmod-crypto-kpp=m" >> .config
