@@ -126,7 +126,21 @@ jobs:
           [ -f ../scripts/add_packages.sh ] && source ../scripts/add_packages.sh || true
           [ -f ../scripts/custome_config.sh ] && source ../scripts/custome_config.sh || true
           cd friendlywrt
-          ./scripts/feeds update -a
+          
+          # Add a retry loop for feeds update
+          RETRY_COUNT=5
+          DELAY=10
+          for i in $(seq 1 $RETRY_COUNT); do
+            ./scripts/feeds update -a && FEEDS_UPDATED=true && break
+            echo "Feeds update failed. Retrying in $DELAY seconds... (Attempt $i/$RETRY_COUNT)"
+            sleep $DELAY
+          done
+          
+          if [ "$FEEDS_UPDATED" != "true" ]; then
+            echo "Failed to update feeds after $RETRY_COUNT attempts. Please check OpenWrt server status."
+            exit 1
+          fi
+          
           ./scripts/feeds install -a
       - name: Configure build
         run: |
