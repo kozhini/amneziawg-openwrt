@@ -141,20 +141,31 @@ jobs:
           fi
           
           ./scripts/feeds install -a
+      - name: Verify kernel source and architecture
+        run: |
+          cd project/friendlywrt
+          KERNEL_PATH=$(find build_dir/target-* -maxdepth 1 -type d -name "linux-*")
+          if [ -d "${KERNEL_PATH}/arch/arm64/crypto" ]; then
+            echo "✅ Verified: 'arch/arm64/crypto' directory exists."
+            echo "Available crypto files:"
+            ls -F ${KERNEL_PATH}/arch/arm64/crypto || true
+          else
+            echo "❌ Error: 'arch/arm64/crypto' directory not found. The build target may be incorrect or the kernel source is incomplete."
+            exit 1
+          fi
       - name: Configure build
         run: |
           cd project/friendlywrt
           
-          # Set the correct target and subtarget before running defconfig
-          echo "CONFIG_TARGET_rockchip=y" > .config
-          echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
-          echo "CONFIG_TARGET_BOARD=\"rockchip\"" >> .config
-          echo "CONFIG_TARGET_SUBTARGET=\"armv8\"" >> .config
-          
+          # Start with a clean config and set the basic target
           make defconfig
           
           # Append the package and crypto configuration to the .config file directly
           cat >> .config << EOF
+          # Explicitly set the target and subtarget to avoid confusion
+          CONFIG_TARGET_rockchip=y
+          CONFIG_TARGET_rockchip_armv8=y
+          
           # Enable AmneziaWG and its packages
           CONFIG_PACKAGE_kmod-amneziawg=m
           CONFIG_PACKAGE_amneziawg-go=m
@@ -163,20 +174,25 @@ jobs:
           
           # Required primitives from amneziawg-linux-kernel-module/src/crypto/Kbuild.include
           CONFIG_CRYPTO=y
+          CONFIG_CRYPTO_BLAKE2S=m
           CONFIG_CRYPTO_CHACHA20=m
           CONFIG_CRYPTO_CHACHA20POLY1305=m
           CONFIG_CRYPTO_POLY1305=m
-
+          CONFIG_CRYPTO_CURVE25519=m
           
           # ARM64 NEON optimizations
           CONFIG_CRYPTO_CHACHA20_NEON=m
           CONFIG_CRYPTO_POLY1305_NEON=m
-
+          CONFIG_CRYPTO_CURVE25519_NEON=m
+          CONFIG_CRYPTO_BLAKE2S_ARM64=m
           
           # Kernel module packages for the crypto primitives
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
           CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
+          CONFIG_PACKAGE_kmod-crypto-curve25519=m
+          CONFIG_PACKAGE_kmod-crypto-blake2s=m
+          CONFIG_PACKAGE_kmod-crypto-kpp=m
           EOF
           
           # Re-run defconfig to resolve dependencies and conflicts
