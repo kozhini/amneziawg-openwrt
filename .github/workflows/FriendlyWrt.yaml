@@ -195,10 +195,14 @@ jobs:
         run: |
           cd project/friendlywrt
           KERNEL_VERSION=$(grep 'KERNEL_PATCHVER:=' include/kernel-defaults.mk | cut -d'.' -f1-3)
-          TARGET_DIR="build_dir/target-aarch64_generic_musl/linux-rockchip_armv8/linux-${KERNEL_VERSION}"
-          echo "Cloning kernel-rockchip v${KERNEL_VERSION} into: ${TARGET_DIR}"
-          mkdir -p ${TARGET_DIR}
-          git clone --depth 1 https://github.com/friendlyarm/kernel-rockchip.git --branch nanopi6-v6.1.y ${TARGET_DIR}
+          TARGET_DIR="build_dir/target-aarch64_generic_musl/linux-rockchip_armv8"
+          TEMP_DIR="kernel-rockchip-temp"
+          
+          echo "Cloning kernel-rockchip v${KERNEL_VERSION}..."
+          git clone --depth 1 https://github.com/friendlyarm/kernel-rockchip.git --branch nanopi6-v6.1.y ${TEMP_DIR}
+
+          echo "Moving kernel source to ${TARGET_DIR}"
+          rm -rf ${TARGET_DIR}/linux-* mv ${TEMP_DIR} ${TARGET_DIR}/linux-${KERNEL_VERSION}
           
       - name: Verify kernel source and architecture
         run: |
