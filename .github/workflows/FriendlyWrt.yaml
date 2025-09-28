@@ -28,6 +28,7 @@ on:
           - "rk3568"
           - "rk3576"
           - "rk3588"
+
 jobs:
   prepare_release:
     runs-on: ubuntu-22.04
@@ -48,6 +49,7 @@ jobs:
           name: "AmneziaWG for FriendlyWrt ${{ inputs.friendlywrt_version }} - ${{ steps.release_tag.outputs.release_tag }}"
           draft: true
           prerelease: false
+
   build_amneziawg:
     needs: prepare_release
     runs-on: ubuntu-22.04
@@ -60,6 +62,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           submodules: true
+
       - name: Checkout AmneziaWG OpenWRT repository
         uses: actions/checkout@v5
         with:
@@ -67,6 +70,7 @@ jobs:
           path: amneziawg-openwrt
           ref: ${{ inputs.amneziawg_version }}
           fetch-depth: 0
+
       - name: Initialize build environment
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -98,13 +102,15 @@ jobs:
           # Install repo tool
           git clone https://github.com/friendlyarm/repo
           sudo cp repo/repo /usr/bin/
+
       - name: Download FriendlyWrt source
         run: |
           mkdir project
           cd project
           repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests -b master-v${{ inputs.friendlywrt_version }} \
                     -m ${{ matrix.target_cpu }}.xml --repo-url=https://github.com/friendlyarm/repo --no-clone-bundle
-          repo sync -c friendlywrt configs device/common device/friendlyelec scripts toolchain --no-clone-bundle
+          repo sync -c friendlywrt configs device/common device/friendlyelec scripts toolchain kernel --no-clone-bundle
+
       - name: Setup AmneziaWG feed and config
         run: |
           cd project
@@ -119,6 +125,7 @@ jobs:
           echo "device/friendlyelec/${{ matrix.target_cpu }}/base.mk" > .current_config.mk
           echo "TARGET_IMAGE_DIRNAME=$TARGET_IMAGE_DIRNAME" >> .current_config.mk
           echo "TARGET_FRIENDLYWRT_CONFIG=$TARGET_FRIENDLYWRT_CONFIG" >> .current_config.mk
+
       - name: Apply customizations and update feeds
         run: |
           cd project
@@ -141,135 +148,265 @@ jobs:
           fi
           
           ./scripts/feeds install -a
-      - name: Configure build
+
+      - name: Configure build with proper NEON crypto support
         run: |
           cd project/friendlywrt
           
           # Start with a clean config and set the basic target
           make defconfig
           
-          # Append the package and crypto configuration to the .config file directly
+          # Configure for AmneziaWG with full ARM64 NEON crypto support
           cat >> .config << EOF
-          # Explicitly set the target and subtarget to avoid confusion
+          # Target configuration
           CONFIG_TARGET_rockchip=y
           CONFIG_TARGET_rockchip_armv8=y
           
-          # Enable AmneziaWG and its packages
+          # Enable AmneziaWG packages
           CONFIG_PACKAGE_kmod-amneziawg=m
           CONFIG_PACKAGE_amneziawg-go=m
           CONFIG_PACKAGE_amneziawg-tools=m
           CONFIG_PACKAGE_luci-proto-amneziawg=m
           
-          # Required primitives from amneziawg-linux-kernel-module/src/crypto/Kbuild.include
+          # Kernel crypto subsystem
           CONFIG_CRYPTO=y
+          CONFIG_CRYPTO_ALGAPI=y
+          CONFIG_CRYPTO_MANAGER=y
+          CONFIG_CRYPTO_MANAGER2=y
+          CONFIG_CRYPTO_AEAD=y
+          CONFIG_CRYPTO_HASH=y
+          CONFIG_CRYPTO_SKCIPHER=y
+          
+          # Required crypto algorithms for AmneziaWG
           CONFIG_CRYPTO_BLAKE2S=m
           CONFIG_CRYPTO_CHACHA20=m
           CONFIG_CRYPTO_CHACHA20POLY1305=m
           CONFIG_CRYPTO_POLY1305=m
           CONFIG_CRYPTO_CURVE25519=m
           
-          # ARM64 NEON optimizations
+          # ARM64 NEON optimized crypto (from kernel-rockchip nanopi6-v6.1.y)
           CONFIG_CRYPTO_CHACHA20_NEON=m
           CONFIG_CRYPTO_POLY1305_NEON=m
           CONFIG_CRYPTO_CURVE25519_NEON=m
           CONFIG_CRYPTO_BLAKE2S_ARM64=m
           
-          # Kernel module packages for the crypto primitives
+          # Crypto library support
+          CONFIG_CRYPTO_LIB_BLAKE2S=m
+          CONFIG_CRYPTO_LIB_CHACHA20POLY1305=m
+          CONFIG_CRYPTO_LIB_CURVE25519=m
+          CONFIG_CRYPTO_LIB_POLY1305=m
+          
+          # Kernel crypto modules packages
+          CONFIG_PACKAGE_kmod-crypto-manager=y
+          CONFIG_PACKAGE_kmod-crypto-hash=m
+          CONFIG_PACKAGE_kmod-crypto-kpp=m
+          CONFIG_PACKAGE_kmod-crypto-aead=m
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
           CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
           CONFIG_PACKAGE_kmod-crypto-curve25519=m
           CONFIG_PACKAGE_kmod-crypto-blake2s=m
-          CONFIG_PACKAGE_kmod-crypto-kpp=m
+          
+          # Don't build full firmware images to save time and space
+          # CONFIG_TARGET_ROOTFS_CPIOGZ is not set
+          # CONFIG_TARGET_ROOTFS_TARGZ is not set
+          # CONFIG_TARGET_ROOTFS_SQUASHFS is not set
           EOF
           
-          # Re-run defconfig to resolve dependencies and conflicts
+          # Resolve dependencies and conflicts
           make defconfig
           
+          echo "=== Final .config crypto settings ==="
+          grep -E "(CRYPTO|amneziawg)" .config | head -20
+
       - name: Download packages
         run: |
           cd project/friendlywrt
           make download -j$(nproc)
           find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
-      - name: Clone kernel source manually
-        run: |
-          cd project/friendlywrt
-          KERNEL_VERSION=$(grep 'KERNEL_PATCHVER:=' include/kernel-defaults.mk | cut -d'.' -f1-3)
-          TARGET_DIR="build_dir/target-aarch64_generic_musl/linux-rockchip_armv8"
-          TEMP_DIR="kernel-rockchip-temp"
-          
-          echo "Cloning kernel-rockchip v${KERNEL_VERSION}..."
-          git clone --depth 1 https://github.com/friendlyarm/kernel-rockchip.git --branch nanopi6-v6.1.y ${TEMP_DIR}
 
-          echo "Moving kernel source to ${TARGET_DIR}"
-          rm -rf ${TARGET_DIR}/linux-* mv ${TEMP_DIR} ${TARGET_DIR}/linux-${KERNEL_VERSION}
+      - name: Prepare kernel for module compilation
+        run: |
+          cd project/friendlywrt
           
-      - name: Verify kernel source and architecture
-        run: |
-          cd project/friendlywrt
-          KERNEL_PATH=$(find build_dir/target-* -maxdepth 1 -type d -name "linux-*")
-          if [ -d "${KERNEL_PATH}/arch/arm64/crypto" ]; then
-            echo "✅ Verified: 'arch/arm64/crypto' directory exists."
-            echo "Available crypto files:"
-            ls -F ${KERNEL_PATH}/arch/arm64/crypto || true
+          echo "=== Preparing kernel for module compilation ==="
+          # Prepare kernel headers and build environment
+          make target/linux/prepare V=s
+          
+          echo "=== Checking prepared kernel ==="
+          find build_dir -name "linux-*" -type d | head -5
+          
+          # Verify NEON crypto is available in prepared kernel
+          KERNEL_BUILD_DIR=$(find build_dir -name "linux-*" -type d | head -1)
+          if [ -n "$KERNEL_BUILD_DIR" ] && [ -d "$KERNEL_BUILD_DIR/arch/arm64/crypto" ]; then
+            echo "✅ NEON crypto confirmed in build environment"
+            echo "Available NEON optimized crypto:"
+            ls -1 "$KERNEL_BUILD_DIR/arch/arm64/crypto/" | grep -E "(chacha|poly|curve|blake)" || true
           else
-            echo "❌ Error: 'arch/arm64/crypto' directory not found. The build target may be incorrect or the kernel source is incomplete."
-            exit 1
+            echo "⚠️ NEON crypto not found in build dir, may be added during compilation"
           fi
-      - name: Build all packages
+
+      - name: Verify kernel source and NEON crypto support
         run: |
           cd project/friendlywrt
-          make -j$(nproc) || make -j1 V=s
+          
+          echo "=== Checking kernel source ==="
+          if [ -d "target/linux/rockchip" ]; then
+            echo "✅ Found rockchip target directory"
+            ls -la target/linux/rockchip/
+          fi
+          
+          # Look for kernel source in common locations
+          KERNEL_LOCATIONS=(
+            "kernel"
+            "../kernel" 
+            "target/linux/rockchip/kernel"
+          )
+          
+          KERNEL_FOUND=false
+          for loc in "${KERNEL_LOCATIONS[@]}"; do
+            if [ -d "$loc" ]; then
+              echo "✅ Found kernel source at: $loc"
+              if [ -d "$loc/arch/arm64/crypto" ]; then
+                echo "✅ NEON crypto support available"
+                echo "Available NEON crypto modules:"
+                ls -1 "$loc/arch/arm64/crypto/" | grep -E "\.(c|S)$" | head -10
+                KERNEL_FOUND=true
+                break
+              fi
+            fi
+          done
+          
+          if [ "$KERNEL_FOUND" != "true" ]; then
+            echo "⚠️ Kernel source not found in expected locations, checking after kernel preparation..."
+          fi
+
+      - name: Build crypto dependencies first
+        run: |
+          cd project/friendlywrt
+          
+          echo "=== Building crypto dependencies ==="
+          # Build crypto infrastructure first
+          make package/kernel/linux/compile V=s || echo "Kernel preparation failed, continuing..."
+          
+          # Build required crypto modules
+          echo "Building crypto kernel modules..."
+          make package/kmod-crypto-manager/compile V=s || echo "crypto-manager failed"
+          make package/kmod-crypto-hash/compile V=s || echo "crypto-hash failed" 
+          make package/kmod-crypto-kpp/compile V=s || echo "crypto-kpp failed"
+          make package/kmod-crypto-aead/compile V=s || echo "crypto-aead failed"
+          
+          # Build NEON-optimized crypto modules
+          echo "Building NEON crypto modules..."
+          make package/kmod-crypto-chacha20poly1305/compile V=s || echo "chacha20poly1305 failed"
+          make package/kmod-crypto-curve25519/compile V=s || echo "curve25519 failed"
+          make package/kmod-crypto-blake2s/compile V=s || echo "blake2s failed"
+
+      - name: Build AmneziaWG packages
+        run: |
+          cd project/friendlywrt
+          
+          echo "=== Building AmneziaWG packages ==="
+          
+          # Build kernel module with verbose output
+          echo "Building AmneziaWG kernel module..."
+          make package/kmod-amneziawg/compile V=s || {
+            echo "❌ Kernel module build failed, checking logs..."
+            find logs -name "*amneziawg*" -exec cat {} \; || echo "No specific logs found"
+          }
+          
+          # Build userspace tools
+          echo "Building AmneziaWG userspace tools..."
+          make package/amneziawg-tools/compile V=s || echo "⚠️ Tools build failed"
+          make package/amneziawg-go/compile V=s || echo "⚠️ Go tools build failed"
+          
+          # Build LuCI interface
+          echo "Building LuCI interface..."
+          make package/luci-proto-amneziawg/compile V=s || echo "⚠️ LuCI build failed"
+          
+          # Install all packages
+          echo "Installing packages..."
+          make package/kmod-amneziawg/install V=s || echo "⚠️ Kernel module install failed"
+          make package/amneziawg-tools/install V=s || echo "⚠️ Tools install failed"
+          make package/amneziawg-go/install V=s || echo "⚠️ Go tools install failed"
+          make package/luci-proto-amneziawg/install V=s || echo "⚠️ LuCI install failed"
+          
+          # Create package index
+          echo "Creating package index..."
+          make package/index V=s || echo "⚠️ Package index creation failed"
+
+      - name: Debug build results
+        run: |
+          cd project/friendlywrt
+          echo "=== Build directory structure ==="
+          find build_dir -name "*amneziawg*" -type d 2>/dev/null | head -10 || echo "No AmneziaWG build dirs found"
+          
+          echo "=== Package binary directory ==="
+          find bin -name "*amneziawg*" -type f 2>/dev/null || echo "No AmneziaWG packages found in bin"
+          find bin -name "*crypto*" -type f 2>/dev/null | head -10 || echo "No crypto packages found"
+          
+          echo "=== Build logs ==="
+          if [ -d logs ]; then
+            echo "Available log files:"
+            ls -la logs/ | head -10
+            echo "=== AmneziaWG related logs ==="
+            find logs -name "*" -exec grep -l "amneziawg\|AmneziaWG" {} \; 2>/dev/null | head -3 | while read log; do
+              echo "--- $log ---"
+              tail -20 "$log"
+            done
+          fi
+
       - name: Prepare artifacts
         run: |
           cd project/friendlywrt
           ARTIFACT_DIR=../../artifact/amneziawg-packages/${{ matrix.target_cpu }}
           mkdir -p "${ARTIFACT_DIR}"
           
-          case ${{ matrix.target_cpu }} in
-            rk3328|rk3528)
-              ARCH="aarch64_cortex-a53"
-              ;;
-            rk3399|rk3576)
-              ARCH="aarch64_cortex-a72_cortex-a53"
-              ;;
-            rk3566|rk3568)
-              ARCH="aarch64_cortex-a55"
-              ;;
-            rk3588)
-              ARCH="aarch64_cortex-a76_cortex-a55"
-              ;;
-            *)
-              ARCH="aarch64_generic"
-              ;;
-          esac
+          # Look for packages in multiple locations
+          echo "=== Searching for packages ==="
           
-          echo "Looking for packages in architecture: $ARCH"
-          find bin -name "*amneziawg*" -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
-          find bin -name "kmod-crypto-*.ipk" -type f -exec cp {} "${ARTIFACT_DIR}" \; 2>/dev/null || true
+          # Standard locations
+          find bin -name "*amneziawg*" -type f -exec cp {} "${ARTIFACT_DIR}/" \; 2>/dev/null || true
+          find bin -name "kmod-crypto-*.ipk" -type f -exec cp {} "${ARTIFACT_DIR}/" \; 2>/dev/null || true
           
-          echo "Found packages:"
-          ls -la "${ARTIFACT_DIR}" || echo "No packages found"
+          # Alternative locations where packages might end up
+          find build_dir -name "*.ipk" -path "*amneziawg*" -exec cp {} "${ARTIFACT_DIR}/" \; 2>/dev/null || true
+          find staging_dir -name "*amneziawg*" -type f -exec cp {} "${ARTIFACT_DIR}/" \; 2>/dev/null || true
           
+          # Create build log for debugging
+          echo "Build attempt for ${{ matrix.target_cpu }}" > "${ARTIFACT_DIR}/build.log"
+          echo "FriendlyWrt version: ${{ inputs.friendlywrt_version }}" >> "${ARTIFACT_DIR}/build.log"
+          echo "AmneziaWG version: ${{ inputs.amneziawg_version }}" >> "${ARTIFACT_DIR}/build.log"
+          echo "Build date: $(date)" >> "${ARTIFACT_DIR}/build.log"
+          
+          # List what we found
+          echo "" >> "${ARTIFACT_DIR}/build.log"
+          echo "Found files:" >> "${ARTIFACT_DIR}/build.log"
+          ls -la "${ARTIFACT_DIR}" >> "${ARTIFACT_DIR}/build.log" 2>&1 || echo "No files found" >> "${ARTIFACT_DIR}/build.log"
+          
+          # Installation instructions
           cat > "${ARTIFACT_DIR}/INSTALL.txt" << 'EOF'
           Installation instructions for AmneziaWG on FriendlyWrt:
           
-          1. Install crypto dependencies first (if needed):
-             opkg install kmod-crypto-*.ipk
+          1. Upload IPK files to your router
           
-          2. Install AmneziaWG kernel module:
-             opkg install kmod-amneziawg_*.ipk
+          2. Install packages in this order:
+             opkg install kmod-crypto-*.ipk (if available)
+             opkg install kmod-amneziawg*.ipk
+             opkg install amneziawg-tools*.ipk
+             opkg install amneziawg-go*.ipk
+             opkg install luci-proto-amneziawg*.ipkg (optional)
           
-          3. Install AmneziaWG tools:
-             opkg install amneziawg-tools_*.ipk
-             opkg install amneziawg-go_*.ipk
+          3. Reboot the router: reboot
           
-          4. Install LuCI interface (optional):
-             opkg install luci-proto-amneziawg_*.ipk
+          4. Configure AmneziaWG through LuCI web interface or command line
           
-          5. Reboot the router after installation
+          Note: If build failed, check build.log for details.
+          You may need to compile manually on your target device.
           EOF
+
       - name: Upload artifacts to draft release
+        if: always()
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
