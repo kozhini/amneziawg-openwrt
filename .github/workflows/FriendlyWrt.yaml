@@ -144,19 +144,26 @@ jobs:
           cd project/friendlywrt
           echo "CONFIG_TARGET_rockchip=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
+          # Crypto primitives
           echo "CONFIG_CRYPTO_CHACHA20=m" >> .config
           echo "CONFIG_CRYPTO_CHACHA20_NEON=m" >> .config
           echo "CONFIG_CRYPTO_POLY1305=m" >> .config
+          echo "CONFIG_CRYPTO_POLY1305_NEON=m" >> .config
           echo "CONFIG_CRYPTO_CHACHA20POLY1305=m" >> .config
+          echo "CONFIG_CRYPTO_CURVE25519=m" >> .config
+          echo "CONFIG_CRYPTO_BLAKE2S=m" >> .config
+          # Kernel modules (kmod packages)
           echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> .config
           echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> .config
           echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-curve25519=m" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-blake2s=m" >> .config
+          # AmneziaWG itself
           echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> .config
           echo "CONFIG_PACKAGE_amneziawg-go=m" >> .config
           echo "CONFIG_PACKAGE_amneziawg-tools=m" >> .config
           echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> .config
           make defconfig
-
 
 
       - name: Download packages
