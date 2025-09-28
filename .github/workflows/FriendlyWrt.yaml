@@ -161,25 +161,19 @@ jobs:
           
           # Required primitives from amneziawg-linux-kernel-module/src/crypto/Kbuild.include
           CONFIG_CRYPTO=y
-          CONFIG_CRYPTO_BLAKE2S=m
           CONFIG_CRYPTO_CHACHA20=m
           CONFIG_CRYPTO_CHACHA20POLY1305=m
           CONFIG_CRYPTO_POLY1305=m
-          CONFIG_CRYPTO_CURVE25519=m
           
-          # ARM64 NEON optimizations
-          CONFIG_CRYPTO_CHACHA20_NEON=m
-          CONFIG_CRYPTO_POLY1305_NEON=m
-          CONFIG_CRYPTO_CURVE25519_NEON=m
-          CONFIG_CRYPTO_BLAKE2S_ARM64=m
+          ## ARM64 NEON optimizations
+          #CONFIG_CRYPTO_CHACHA20_NEON=m
+          #CONFIG_CRYPTO_POLY1305_NEON=m
+          #CONFIG_CRYPTO_CURVE25519_NEON=m
           
           # Kernel module packages for the crypto primitives
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
           CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
-          CONFIG_PACKAGE_kmod-crypto-curve25519=m
-          CONFIG_PACKAGE_kmod-crypto-blake2s=m
-          CONFIG_PACKAGE_kmod-crypto-kpp=m
           EOF
           
           # Re-run defconfig to resolve dependencies and conflicts
