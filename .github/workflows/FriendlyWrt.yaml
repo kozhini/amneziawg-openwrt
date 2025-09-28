@@ -149,6 +149,10 @@ jobs:
           
           # Append the package and crypto configuration to the .config file directly
           cat >> .config << EOF
+          # Explicitly set the target and subtarget to avoid confusion
+          CONFIG_TARGET_rockchip=y
+          CONFIG_TARGET_rockchip_armv8=y
+          
           # Enable AmneziaWG and its packages
           CONFIG_PACKAGE_kmod-amneziawg=m
           CONFIG_PACKAGE_amneziawg-go=m
