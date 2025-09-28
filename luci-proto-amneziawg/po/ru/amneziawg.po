@@ -128,6 +128,7 @@ msgstr "PSK"
 msgid "Required. Public key of the AmneziaWG peer."
 msgstr "Обязательно. Публичный ключ AmneziaWG узла."
 
+msgid ""
 "Optional. Private key of the AmneziaWG peer. The key is not required for "
 "establishing a connection but allows generating a peer configuration or QR "
 "code if available. It can be removed after the configuration has been "
