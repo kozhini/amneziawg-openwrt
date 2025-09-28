@@ -166,8 +166,8 @@ jobs:
           CONFIG_CRYPTO_POLY1305=m
           
           ## ARM64 NEON optimizations
-          #CONFIG_CRYPTO_CHACHA20_NEON=m
-          #CONFIG_CRYPTO_POLY1305_NEON=m
+          CONFIG_CRYPTO_CHACHA20_NEON=m
+          CONFIG_CRYPTO_POLY1305_NEON=m
           #CONFIG_CRYPTO_CURVE25519_NEON=m
           
           # Kernel module packages for the crypto primitives
