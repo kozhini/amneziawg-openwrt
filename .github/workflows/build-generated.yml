@@ -1,62 +1,67 @@
-name: Build (Generated)
+name: Build AmneziaWG from all OpenWRT/ImmortalWRT
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
-      - main
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  build-amneziawg:
+    name: Build AmneziaWG for ${{ matrix.target }}/${{ matrix.subtarget }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: []
+        subtarget: []
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: Checkout repo
+      - name: Checkout AWG repository
         uses: actions/checkout@v5
+        with:
+          path: amneziawg
+          ref: master
+          fetch-depth: 0
 
-      - name: Setup build environment
+      - name: Install additional packages
         run: |
+          set -e -x
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev
+          sudo apt-get install -y python3-pyelftools python3-dev python3-setuptools swig
 
-      - name: Prepare version
-        id: vars
+      - name: Download and prepare SDK
         run: |
-          TAG_DATE=$(date +'%Y%m%d')
-          echo "TAG_DATE=$TAG_DATE" >> $GITHUB_ENV
-          echo "BUILD_TAG=build-${TAG_DATE}" >> $GITHUB_ENV
+          set -e -x
+          base_url="https://downloads.openwrt.org/releases/24.10.3/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
+          sdk_url=$(curl -s "${base_url}" | grep -oP "href=\"openwrt-sdk[^\"]+\.tar\.[a-z0-9]+\"" | sed -e 's/href="//' -e 's/"$//' | head -n1)
+          curl -fsLO "$base_url$sdk_url"
+          tar -xf "$(basename "$sdk_url")"
+          mv *sdk* openwrt
+          echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
+          ./openwrt/scripts/feeds update -a
+          curl -fsL "$base_url/config.buildinfo" > openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> openwrt/.config
+          echo "CONFIG_PACKAGE_amneziawg-tools=m" >> openwrt/.config
+          echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> openwrt/.config
+          ./openwrt/scripts/feeds install -a
+          make -C openwrt defconfig
 
-      - name: Build package
+      - name: Compile AmneziaWG packages
         run: |
-          make -j$(nproc)
+          set -e -x
+          cd openwrt
+          make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
+          make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j $(nproc)
+          make package/amneziawg-tools/{clean,download,prepare,compile} -j $(nproc)
 
-      - name: Archive artifacts
+      - name: Prepare artifacts
+        run: |
+          mkdir awgrelease
+          find "openwrt/bin/targets/${{ matrix.target }}/${{ matrix.subtarget }}/packages" -maxdepth 1 -type f -name 'kmod-amneziawg*' -exec cp {} awgrelease \;
+          find "openwrt/bin/packages/" -type f -name '*.ipk' -exec cp {} awgrelease \;
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ env.TAG_DATE }}
-          path: |
-            bin/*
-            dist/*
-
-  release:
-    runs-on: ubuntu-latest
-    needs: build
-    if: startsWith(github.ref, 'refs/heads/master') || startsWith(github.ref, 'refs/heads/main')
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v5
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-${{ env.TAG_DATE }}
-          path: release
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.BUILD_TAG }}
-          name: Release ${{ env.BUILD_TAG }}
-          files: release/**
+          name: AmneziaWG-${{ matrix.target }}-${{ matrix.subtarget }}
+          path: awgrelease/*
