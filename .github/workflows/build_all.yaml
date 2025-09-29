@@ -31,16 +31,15 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      # Убедимся, что jq установлен
       - name: Install JQ (JSON processor)
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Set build matrix (using reliable EOF output)
+      - name: Set build matrix
         id: set-matrix
         run: |
           set -e -x
           
-          # Определяем базовый URL
+          # Определение базового URL
           if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
             if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
               base_url="https://downloads.openwrt.org/snapshots/targets"
@@ -78,8 +77,6 @@ jobs:
                 arch=$(echo "$sdk_file" | sed -E 's/.*_gcc-[0-9.]+_([^.]+)\.Linux.*/\1/')
                 
                 if [ -n "$arch" ] && [ "$arch" != "$sdk_file" ] && [ "$arch" != "skip" ]; then
-                  echo "  Found SDK for $target/$subtarget (Arch: $arch)"
-                  
                   if [ -n "$matrix_items" ]; then
                     matrix_items="$matrix_items,"
                   fi
@@ -96,7 +93,6 @@ jobs:
           
           matrix_json="{\"include\":[$matrix_items]}"
           
-          # 🔥 Критический шаг: очищаем и выводим JSON в компактном формате
           clean_matrix=$(echo "$matrix_json" | jq -c .)
           
           if [ $? -ne 0 ]; then
@@ -104,13 +100,10 @@ jobs:
               exit 1
           fi
 
-          # 🔥 Используем надежный синтаксис GITHUB_OUTPUT с EOF
-          echo "matrix<<EOF" >> $GITHUB_OUTPUT
-          echo "$clean_matrix" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
           echo "Generated matrix successfully sent to GITHUB_OUTPUT."
           echo "Total valid targets found: $(echo "$clean_matrix" | jq '.include | length')"
+          
+          echo "matrix=$clean_matrix" >> $GITHUB_OUTPUT
 
 ---
 
@@ -118,8 +111,7 @@ jobs:
   # Этап 2: Сборка пакетов с использованием матрицы
   # =======================================================
   build-amneziawg:
-    # 🔥 Упрощенное имя задачи, чтобы избежать сбоев парсинга при большой матрице
-    name: "Build AWG Target: ${{ matrix.target }}/${{ matrix.subtarget }}"
+    name: "Build ${{ inputs.firmware_type }} ${{ inputs.openwrt_version }}: ${{ matrix.target }}/${{ matrix.subtarget }} (${{ matrix.arch }})"
     needs: prepare-targets
     runs-on: ubuntu-22.04
     strategy:
@@ -132,7 +124,7 @@ jobs:
     
     steps:
     - name: Checkout AWG repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v4
       with:
         path: amneziawg
         ref: ${{ inputs.amneziawg_version }}
@@ -149,46 +141,28 @@ jobs:
       run: |
         set -e -x
         
-        # Функция для повторных попыток загрузки
         retry_command() {
-          local max_attempts=3
-          local delay=5
-          local attempt=1
-          local command="$@"
+          local max_attempts=3; local delay=5; local attempt=1; local command="$@"
           while [ $attempt -le $max_attempts ]; do
-            echo "Attempt $attempt of $max_attempts: $command"
             if eval "$command"; then return 0; fi
-            echo "Command failed. Retrying in ${delay}s..."
-            sleep $delay
-            delay=$((delay * 2))
-            attempt=$((attempt + 1))
+            sleep $delay; delay=$((delay * 2)); attempt=$((attempt + 1))
           done
-          echo "Command failed after $max_attempts attempts"
           return 1
         }
         
+        # Определение базового URL и паттерна SDK
         if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
-          if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
-            base_url="https://downloads.openwrt.org/snapshots/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
-          else
-            base_url="https://downloads.openwrt.org/releases/${{ inputs.openwrt_version }}/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
-          fi
+          base_url_part="https://downloads.openwrt.org/${{ inputs.openwrt_version == 'SNAPSHOT' && 'snapshots' || 'releases' }}/${{ inputs.openwrt_version }}/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
           sdk_pattern="openwrt-sdk"
         else
-          # ImmortalWrt URLs
-          if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
-            base_url="https://downloads.immortalwrt.org/snapshots/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
-          else
-            base_url="https://downloads.immortalwrt.org/releases/${{ inputs.openwrt_version }}/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
-          fi
+          base_url_part="https://downloads.immortalwrt.org/${{ inputs.openwrt_version == 'SNAPSHOT' && 'snapshots' || 'releases' }}/${{ inputs.openwrt_version }}/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
           sdk_pattern="immortalwrt-sdk"
         fi
         
-        sdk_url=$(curl -sL "${base_url}" | grep -oP "href=\"${sdk_pattern}[^\"]+\.tar\.(zst|xz|gz|bz2)\"" | sed -e 's/href="//' -e 's/"$//' | head -n1)
+        sdk_url=$(curl -sL "${base_url_part}" | grep -oP "href=\"${sdk_pattern}[^\"]+\.tar\.(zst|xz|gz|bz2)\"" | sed -e 's/href="//' -e 's/"$//' | head -n1)
         if [[ -z "$sdk_url" ]]; then echo "SDK file not found."; exit 1; fi
         
-        echo "Downloading SDK: $base_url$sdk_url"
-        retry_command "curl -fsLO '$base_url$sdk_url'"
+        retry_command "curl -fsLO '$base_url_part$sdk_url'"
         file_name=$(basename "$sdk_url")
         
         tar -xf "$file_name"
@@ -198,9 +172,9 @@ jobs:
         echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
         retry_command "./openwrt/scripts/feeds update -a"
         
-        # Загрузка и настройка .config
-        curl -fsL "$base_url/config.buildinfo" > openwrt/.config || curl -fsL "$base_url/config.seed" > openwrt/.config
+        curl -fsL "$base_url_part/config.buildinfo" > openwrt/.config || curl -fsL "$base_url_part/config.seed" > openwrt/.config
         
+        # Добавление пакетов в .config
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> openwrt/.config
@@ -235,7 +209,7 @@ jobs:
       run: |
         set -e -x
         cd openwrt
-        # Используем 'install' для копирования .ipk в bin/targets и bin/packages
+        # Используем 'install' для копирования .ipk
         make package/kmod-amneziawg/{clean,download,prepare,compile,install} -j $(nproc)
         make package/luci-proto-amneziawg/{clean,download,prepare,compile,install} -j $(nproc)
         make package/amneziawg-tools/{clean,download,prepare,compile,install} -j $(nproc)
@@ -246,10 +220,8 @@ jobs:
         set -e -x
         mkdir awgrelease
         
-        # Собираем kmod-amneziawg (из папки targets)
         find "openwrt/bin/targets/${{ matrix.target }}/${{ matrix.subtarget }}/packages" -maxdepth 1 -type f -name 'kmod-amneziawg*' -exec cp {} awgrelease/ \; 2>/dev/null || true
         
-        # Собираем tools и luci (из папки packages/arch)
         find "openwrt/bin/packages/${{ matrix.arch }}/awgopenwrt" -maxdepth 1 -type f \( -name 'amneziawg-tools*' -o -name 'luci-proto-amneziawg*' \) -exec cp {} awgrelease/ \; 2>/dev/null || true
         
         if [ -z "$(ls -A awgrelease)" ]; then
@@ -267,7 +239,7 @@ jobs:
 ---
 
   # =======================================================
-  # Этап 3: Создание релиза
+  # Этап 3: Создание релиза (Минимальное описание)
   # =======================================================
   create-release:
     name: Create Release 📦
@@ -283,41 +255,63 @@ jobs:
       - name: Organize files and generate package list
         id: organize_files
         run: |
+          set -e -x
           mkdir -p final-release
-          find all-releases -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} final-release/ \;
+          
+          find all-releases -type f -name '*.ipk' -exec cp {} final-release/ \;
           
           package_count=$(ls -1 final-release/ | wc -l)
           echo "package_count=$package_count" >> $GITHUB_OUTPUT
 
-          echo "# Package List" > PACKAGES.md
-          echo "## ${{ inputs.firmware_type }} ${{ inputs.openwrt_version }} Packages" >> PACKAGES.md
+          # Создаем содержимое релиза (PACKAGES.md)
+          echo "## ${{ inputs.firmware_type }} ${{ inputs.openwrt_version }} Packages" > PACKAGES.md
           echo "| File | Size |" >> PACKAGES.md
           echo "|:---|:---|" >> PACKAGES.md
           
+          files_to_attach=""
           cd final-release
           for file in *; do
             size=$(du -h "$file" | awk '{print $1}')
             echo "| \`$file\` | $size |" >> ../PACKAGES.md
+            files_to_attach="$files_to_attach final-release/$file"
           done
           cd ..
           
-          echo "release_files=final-release/* PACKAGES.md" >> $GITHUB_OUTPUT
+          # Устанавливаем список файлов для прикрепления
+          echo "release_files=$files_to_attach PACKAGES.md" >> $GITHUB_OUTPUT
 
-      - name: Get current date
-        id: get_date
-        run: echo "date=$(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+      - name: Read package list for body
+        id: read_body
+        # Читаем содержимое PACKAGES.md для использования в теле релиза
+        run: echo "package_list=$(cat PACKAGES.md)" >> $GITHUB_OUTPUT
         
-      - name: Create Release
+      - name: Create Release and Attach Files 🏷️
         if: steps.organize_files.outputs.package_count > 0
         uses: softprops/action-gh-release@v2
         with:
+          # Прикрепляем все собранные .ipk файлы и PACKAGES.md
           files: ${{ steps.organize_files.outputs.release_files }}
           tag_name: ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }}-all-targets-${{ github.run_number }}
-          name: 'AmneziaWG ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }} (All Targets)'
+          name: 'AmneziaWG ${{ inputs.firmware_type }} ${{ inputs.openwrt_version }}'
           body: |
-            🚀 Автоматическая сборка пакетов AmneziaWG для всех целевых платформ OpenWrt/ImmortalWrt.
+            ### 📦 Сборка AmneziaWG
             
-            **Полный список пакетов для всех архитектур находится в файле PACKAGES.md.**
+            **Тип прошивки:** ${{ inputs.firmware_type }}
+            **Версия прошивки:** ${{ inputs.openwrt_version }}
+            
+            ---
+            
+            ### 📋 Список прикрепленных пакетов:
+            
+            ${{ steps.read_body.outputs.package_list }}
+            
+            ---
+            
+            **Установка:**
+            ```bash
+            opkg update
+            opkg install kmod-amneziawg amneziawg-tools luci-proto-amneziawg
+            ```
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
