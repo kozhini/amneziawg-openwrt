@@ -12,7 +12,7 @@ on:
           - "openwrt"
           - "immortalwrt"
       openwrt_version:
-        description: "OpenWrt/ImmortalWrt version (24.10.2, 23.05.6, SNAPSHOT)"
+        description: "OpenWrt/ImmortalWrt version (e.g., 24.10.2, 23.05.6, SNAPSHOT)"
         type: string
         required: true
         default: "24.10.2"
@@ -73,16 +73,23 @@ jobs:
             for subtarget in $subtargets; do
               echo "  Processing subtarget: $target/$subtarget"
               
-              # Проверяем наличие SDK
-              sdk_check=$(curl -sL "$base_url/$target/$subtarget/" | grep -c 'sdk.*\.tar' || true)
+              # Получаем имя SDK файла
+              if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
+                sdk_file=$(curl -sL "$base_url/$target/$subtarget/" | grep -oP 'openwrt-sdk[^"]+\.tar\.[a-z0-9]+' | head -n1)
+              else
+                sdk_file=$(curl -sL "$base_url/$target/$subtarget/" | grep -oP 'immortalwrt-sdk[^"]+\.tar\.[a-z0-9]+' | head -n1)
+              fi
               
-              if [ "$sdk_check" -gt 0 ]; then
-                # Получаем architecture из config.buildinfo
-                arch=$(curl -sL "$base_url/$target/$subtarget/config.buildinfo" 2>/dev/null | \
-                  grep -oP 'CONFIG_TARGET_ARCH_PACKAGES="\K[^"]+' || echo "")
+              if [ -n "$sdk_file" ]; then
+                echo "    Found SDK: $sdk_file"
                 
-                if [ -n "$arch" ] && [ "$arch" != "skip" ]; then
-                  echo "    Found arch: $arch"
+                # Извлекаем архитектуру из имени SDK
+                # Формат: openwrt-sdk-VERSION-TARGET-SUBTARGET_gcc-VERSION_ARCH.Linux-x86_64.tar.zst
+                # или: immortalwrt-sdk-VERSION-TARGET-SUBTARGET_gcc-VERSION_ARCH.Linux-x86_64.tar.zst
+                arch=$(echo "$sdk_file" | sed -E 's/.*_gcc-[0-9.]+_([^.]+)\.Linux.*/\1/')
+                
+                if [ -n "$arch" ] && [ "$arch" != "$sdk_file" ] && [ "$arch" != "skip" ]; then
+                  echo "    Extracted arch: $arch"
                   
                   # Добавляем в JSON
                   if [ -n "$matrix_items" ]; then
@@ -90,7 +97,7 @@ jobs:
                   fi
                   matrix_items="$matrix_items{\"target\":\"$target\",\"subtarget\":\"$subtarget\",\"arch\":\"$arch\"}"
                 else
-                  echo "    Skipping $target/$subtarget (arch not found or set to skip)"
+                  echo "    Skipping $target/$subtarget (failed to extract arch from SDK filename)"
                 fi
               else
                 echo "    Skipping $target/$subtarget (no SDK found)"
