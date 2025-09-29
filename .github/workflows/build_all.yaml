@@ -73,19 +73,19 @@ jobs:
             for subtarget in $subtargets; do
               echo "  Processing subtarget: $target/$subtarget"
               
-              # Получаем имя SDK файла
+              # Получаем имя SDK файла (поддерживаем разные расширения: .tar.zst, .tar.xz, .tar.gz, .tar.bz2)
               if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
-                sdk_file=$(curl -sL "$base_url/$target/$subtarget/" | grep -oP 'openwrt-sdk[^"]+\.tar\.[a-z0-9]+' | head -n1)
+                sdk_file=$(curl -sL "$base_url/$target/$subtarget/" | grep -oP 'openwrt-sdk[^"]+\.tar\.(zst|xz|gz|bz2)' | head -n1)
               else
-                sdk_file=$(curl -sL "$base_url/$target/$subtarget/" | grep -oP 'immortalwrt-sdk[^"]+\.tar\.[a-z0-9]+' | head -n1)
+                sdk_file=$(curl -sL "$base_url/$target/$subtarget/" | grep -oP 'immortalwrt-sdk[^"]+\.tar\.(zst|xz|gz|bz2)' | head -n1)
               fi
               
               if [ -n "$sdk_file" ]; then
                 echo "    Found SDK: $sdk_file"
                 
                 # Извлекаем архитектуру из имени SDK
-                # Формат: openwrt-sdk-VERSION-TARGET-SUBTARGET_gcc-VERSION_ARCH.Linux-x86_64.tar.zst
-                # или: immortalwrt-sdk-VERSION-TARGET-SUBTARGET_gcc-VERSION_ARCH.Linux-x86_64.tar.zst
+                # Формат: openwrt-sdk-VERSION-TARGET-SUBTARGET_gcc-VERSION_ARCH.Linux-x86_64.tar.{zst|xz|gz|bz2}
+                # Пример: openwrt-sdk-23.05.6-bmips-bcm6328_gcc-12.3.0_musl.Linux-x86_64.tar.xz -> musl
                 arch=$(echo "$sdk_file" | sed -E 's/.*_gcc-[0-9.]+_([^.]+)\.Linux.*/\1/')
                 
                 if [ -n "$arch" ] && [ "$arch" != "$sdk_file" ] && [ "$arch" != "skip" ]; then
