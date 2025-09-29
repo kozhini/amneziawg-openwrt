@@ -177,27 +177,14 @@ jobs:
           CONFIG_CRYPTO_KPP=y
           
           # Required crypto algorithms for AmneziaWG
-          CONFIG_CRYPTO_BLAKE2S=m
           CONFIG_CRYPTO_CHACHA20=m
           CONFIG_CRYPTO_CHACHA20POLY1305=m
           CONFIG_CRYPTO_POLY1305=m
-          CONFIG_CRYPTO_CURVE25519=m
           
           # ARM64 NEON optimized crypto
           CONFIG_CRYPTO_CHACHA20_NEON=m
           CONFIG_CRYPTO_POLY1305_NEON=m
-          CONFIG_CRYPTO_CURVE25519_NEON=m
           
-          # Correct kernel module package names in OpenWrt
-          CONFIG_PACKAGE_kmod-crypto-aead=m
-          CONFIG_PACKAGE_kmod-crypto-hash=m
-          CONFIG_PACKAGE_kmod-crypto-kpp=m
-          CONFIG_PACKAGE_kmod-crypto-skcipher=m
-          
-          # Don't build images to save time
-          # CONFIG_TARGET_ROOTFS_CPIOGZ is not set
-          # CONFIG_TARGET_ROOTFS_TARGZ is not set
-          # CONFIG_TARGET_ROOTFS_SQUASHFS is not set
           EOF
           
           # Resolve dependencies and conflicts
@@ -384,94 +371,153 @@ jobs:
           find package -name "*amneziawg*" -type d 2>/dev/null | head -5
           find feeds -name "*amneziawg*" -type d 2>/dev/null | head -5
 
-      - name: Prepare artifacts with enhanced search
+      - name: Prepare artifacts - IPK files only
         run: |
           cd project/friendlywrt
           ARTIFACT_DIR=../../artifact/amneziawg-packages/${{ matrix.target_cpu }}
           mkdir -p "${ARTIFACT_DIR}"
           
-          echo "=== Enhanced package search ==="
+          echo "=== Searching for IPK files only ==="
           
-          # Search in all possible locations with more patterns
-          find . -name "*amneziawg*" -type f -exec cp {} "${ARTIFACT_DIR}/" \; 2>/dev/null || true
-          find . -name "*amnezia*" -type f -name "*.ipk" -exec cp {} "${ARTIFACT_DIR}/" \; 2>/dev/null || true
-          find . -name "*wireguard*" -type f -name "*amnezia*" -exec cp {} "${ARTIFACT_DIR}/" \; 2>/dev/null || true
+          # Find and copy ONLY .ipk files
+          IPK_COUNT=0
           
-          # Copy any crypto-related IPKs that might be needed
-          find bin -name "kmod-crypto-*.ipk" -exec cp {} "${ARTIFACT_DIR}/" \; 2>/dev/null || true
-          
-          # Copy build logs for analysis
-          mkdir -p "${ARTIFACT_DIR}/logs"
-          if [ -d logs ]; then
-            cp logs/*.log "${ARTIFACT_DIR}/logs/" 2>/dev/null || true
+          # Search in bin directory (standard location for built packages)
+          if [ -d "bin" ]; then
+            echo "Searching in bin directory..."
+            while IFS= read -r -d '' file; do
+              cp "$file" "${ARTIFACT_DIR}/"
+              echo "✅ Found: $(basename "$file")"
+              ((IPK_COUNT++))
+            done < <(find bin -name "*.ipk" -type f -print0 2>/dev/null)
           fi
           
-          # Copy compilation logs from temp
-          cp /tmp/*.log "${ARTIFACT_DIR}/logs/" 2>/dev/null || true
+          # If no IPKs found in bin, try build_dir
+          if [ $IPK_COUNT -eq 0 ]; then
+            echo "No IPKs in bin, searching build_dir..."
+            while IFS= read -r -d '' file; do
+              # Only copy if it contains amneziawg or crypto in the name
+              if [[ $(basename "$file") =~ (amneziawg|crypto) ]]; then
+                cp "$file" "${ARTIFACT_DIR}/"
+                echo "✅ Found: $(basename "$file")"
+                ((IPK_COUNT++))
+              fi
+            done < <(find build_dir -name "*.ipk" -type f -print0 2>/dev/null)
+          fi
           
-          # Create comprehensive build report
+          echo "=== Total IPK files found: $IPK_COUNT ==="
+          
+          # Create build report
           cat > "${ARTIFACT_DIR}/build-report.txt" << EOF
-          Build Report for AmneziaWG on FriendlyWrt
-          =========================================
+          AmneziaWG Build Report
+          =====================
           
-          Target CPU: ${{ matrix.target_cpu }}
-          FriendlyWrt version: ${{ inputs.friendlywrt_version }}
-          AmneziaWG version: ${{ inputs.amneziawg_version }}
-          Build date: $(date)
-          Builder: GitHub Actions
+          Target: ${{ matrix.target_cpu }}
+          FriendlyWrt: ${{ inputs.friendlywrt_version }}
+          AmneziaWG: ${{ inputs.amneziawg_version }}
+          Build Date: $(date)
           
-          === Feed Status ===
-          $(ls -la feeds/amneziawg/ 2>/dev/null || echo "AmneziaWG feed directory not found")
+          IPK Packages Found: $IPK_COUNT
           
-          === Package Search Results ===
-          $(find . -name "*amneziawg*" -type f 2>/dev/null | head -20 || echo "No AmneziaWG files found")
+          Package List:
+          $(ls -lh "${ARTIFACT_DIR}"/*.ipk 2>/dev/null || echo "No IPK files")
           
-          === Available IPK Files ===
-          $(find bin -name "*.ipk" 2>/dev/null | head -20 || echo "No IPK files found")
-          
-          === Build Directory ===
-          $(find build_dir -name "*amneziawg*" -type d 2>/dev/null || echo "No AmneziaWG build directories")
-          
-          === Config Check ===
-          $(grep -E "(CRYPTO|amneziawg)" .config | head -20)
-          
+          Architecture Mapping for ${{ matrix.target_cpu }}:
           EOF
           
-          # List final artifacts
-          echo "=== Final artifacts ==="
-          ls -la "${ARTIFACT_DIR}" || echo "No final artifacts"
+          case ${{ matrix.target_cpu }} in
+            rk3328|rk3528)
+              echo "  Architecture: aarch64_cortex-a53" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+            rk3399|rk3576)
+              echo "  Architecture: aarch64_cortex-a72_cortex-a53" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+            rk3566|rk3568)
+              echo "  Architecture: aarch64_cortex-a55" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+            rk3588)
+              echo "  Architecture: aarch64_cortex-a76_cortex-a55" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+            *)
+              echo "  Architecture: aarch64_generic" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+          esac
           
-          # Installation instructions (updated)
+          # Create installation instructions
           cat > "${ARTIFACT_DIR}/INSTALL.txt" << 'EOF'
-          Installation instructions for AmneziaWG on FriendlyWrt:
+          AmneziaWG Installation for FriendlyWrt
+          ======================================
           
-          If IPK files are present:
-          1. Upload IPK files to your router (scp or web interface)
-          2. Install in order:
+          Prerequisites:
+          - FriendlyWrt router with internet access
+          - SSH or web access to router
+          
+          Installation Steps:
+          
+          1. Upload IPK files to router:
+             scp *.ipk root@192.168.x.x:/tmp/
+          
+          2. SSH to router and install packages:
+             ssh root@192.168.x.x
+             cd /tmp
+             
+          3. Install in this order:
+             # Crypto dependencies (if present)
              opkg install kmod-crypto-*.ipk
-             opkg install kmod-amneziawg*.ipk  
+             
+             # AmneziaWG kernel module
+             opkg install kmod-amneziawg*.ipk
+             
+             # Userspace tools
              opkg install amneziawg-tools*.ipk
              opkg install amneziawg-go*.ipk
+             
+             # LuCI web interface (optional)
              opkg install luci-proto-amneziawg*.ipk
-          3. Reboot: reboot
           
-          If no IPK files are present (build failed):
-          - Check build-report.txt and logs/ for errors
-          - Consider building directly on target device
-          - Check if AmneziaWG feed is compatible with this FriendlyWrt version
+          4. Reboot router:
+             reboot
           
-          Manual build on device:
-          1. opkg update
-          2. opkg install git-http
-          3. git clone https://github.com/kozhini/amneziawg-openwrt.git
-          4. Follow README instructions for manual compilation
+          5. Verify installation:
+             awg --version
+             
+          Configuration:
+          - Web UI: System > Network > Interfaces > Add new interface
+          - CLI: /etc/config/network
+          
+          Troubleshooting:
+          - If "Unknown package" error: check architecture compatibility
+          - If kernel module fails: ensure kernel version matches
+          - Logs: logread | grep amneziawg
+          
+          For manual compilation or issues, see:
+          https://github.com/kozhini/amneziawg-openwrt
           EOF
+          
+          # Save build logs if IPK count is 0
+          if [ $IPK_COUNT -eq 0 ]; then
+            echo "=== Build failed, saving diagnostic logs ===" >> "${ARTIFACT_DIR}/build-report.txt"
+            echo "" >> "${ARTIFACT_DIR}/build-report.txt"
+            echo "Feed Status:" >> "${ARTIFACT_DIR}/build-report.txt"
+            ls -la feeds/amneziawg/ 2>&1 >> "${ARTIFACT_DIR}/build-report.txt" || echo "Feed not found" >> "${ARTIFACT_DIR}/build-report.txt"
+            echo "" >> "${ARTIFACT_DIR}/build-report.txt"
+            echo "Recent Build Errors:" >> "${ARTIFACT_DIR}/build-report.txt"
+            find logs -name "*.log" -exec grep -l "amneziawg" {} \; 2>/dev/null | head -2 | while read log; do
+              echo "=== $log ===" >> "${ARTIFACT_DIR}/build-report.txt"
+              tail -50 "$log" >> "${ARTIFACT_DIR}/build-report.txt"
+            done 2>&1 >> "${ARTIFACT_DIR}/build-report.txt"
+          fi
+          
+          echo "=== Final artifact directory contents ==="
+          ls -lh "${ARTIFACT_DIR}/"
 
-      - name: Upload artifacts to draft release
+      - name: Upload IPK packages to draft release
         if: always()
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ needs.prepare_release.outputs.release_tag }}
-          files: artifact/amneziawg-packages/${{ matrix.target_cpu }}/*
+          files: |
+            artifact/amneziawg-packages/${{ matrix.target_cpu }}/*.ipk
+            artifact/amneziawg-packages/${{ matrix.target_cpu }}/build-report.txt
