@@ -12,7 +12,7 @@ on:
           - "openwrt"
           - "immortalwrt"
       openwrt_version:
-        description: "OpenWrt/ImmortalWrt version (e.g., 24.10.2, 23.05.6, SNAPSHOT)"
+        description: "OpenWrt/ImmortalWrt version (24.10.2, 23.05.6, SNAPSHOT)"
         type: string
         required: true
         default: "24.10.2"
@@ -81,7 +81,7 @@ jobs:
                 arch=$(curl -sL "$base_url/$target/$subtarget/config.buildinfo" 2>/dev/null | \
                   grep -oP 'CONFIG_TARGET_ARCH_PACKAGES="\K[^"]+' || echo "")
                 
-                if [ -n "$arch" ]; then
+                if [ -n "$arch" ] && [ "$arch" != "skip" ]; then
                   echo "    Found arch: $arch"
                   
                   # Добавляем в JSON
@@ -90,7 +90,7 @@ jobs:
                   fi
                   matrix_items="$matrix_items{\"target\":\"$target\",\"subtarget\":\"$subtarget\",\"arch\":\"$arch\"}"
                 else
-                  echo "    Warning: arch not found for $target/$subtarget"
+                  echo "    Skipping $target/$subtarget (arch not found or set to skip)"
                 fi
               else
                 echo "    Skipping $target/$subtarget (no SDK found)"
@@ -99,7 +99,13 @@ jobs:
           done
           
           if [ -z "$matrix_items" ]; then
-            echo "No valid targets found with SDK"
+            echo "ERROR: No valid targets found with SDK and valid architecture"
+            echo "This might mean:"
+            echo "  1. The version ${{ inputs.openwrt_version }} does not exist"
+            echo "  2. The URL structure has changed"
+            echo "  3. All targets lack proper architecture configuration"
+            echo ""
+            echo "Attempted URL: $base_url"
             exit 1
           fi
           
@@ -108,6 +114,10 @@ jobs:
           
           echo "Generated matrix:"
           echo "$matrix_json" | jq '.'
+          
+          # Подсчитываем количество найденных целей
+          target_count=$(echo "$matrix_json" | jq '.include | length')
+          echo "Total valid targets found: $target_count"
           
           echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
 
