@@ -177,14 +177,27 @@ jobs:
           CONFIG_CRYPTO_KPP=y
           
           # Required crypto algorithms for AmneziaWG
+          CONFIG_CRYPTO_BLAKE2S=m
           CONFIG_CRYPTO_CHACHA20=m
           CONFIG_CRYPTO_CHACHA20POLY1305=m
           CONFIG_CRYPTO_POLY1305=m
+          CONFIG_CRYPTO_CURVE25519=m
           
           # ARM64 NEON optimized crypto
           CONFIG_CRYPTO_CHACHA20_NEON=m
           CONFIG_CRYPTO_POLY1305_NEON=m
+          CONFIG_CRYPTO_CURVE25519_NEON=m
           
+          # Correct kernel module package names in OpenWrt
+          CONFIG_PACKAGE_kmod-crypto-aead=m
+          CONFIG_PACKAGE_kmod-crypto-hash=m
+          CONFIG_PACKAGE_kmod-crypto-kpp=m
+          CONFIG_PACKAGE_kmod-crypto-skcipher=m
+          
+          # Don't build images to save time
+          # CONFIG_TARGET_ROOTFS_CPIOGZ is not set
+          # CONFIG_TARGET_ROOTFS_TARGZ is not set
+          # CONFIG_TARGET_ROOTFS_SQUASHFS is not set
           EOF
           
           # Resolve dependencies and conflicts
@@ -294,31 +307,92 @@ jobs:
         run: |
           cd project/friendlywrt
           
-          echo "=== Building AmneziaWG packages ==="
+          echo "=== Checking AmneziaWG feed integration ==="
+          ./scripts/feeds list -s | grep -i amnezia || echo "⚠️ AmneziaWG not in feeds list"
           
-          # Check what AmneziaWG packages are actually available
-          echo "Checking available AmneziaWG packages..."
-          ./scripts/feeds list | grep -i amnezia || echo "No AmneziaWG packages found in feeds"
-          ls feeds/amneziawg/ || echo "AmneziaWG feed directory not found"
+          # Check if packages are available
+          echo "=== Available AmneziaWG packages ==="
+          ls -la feeds/amneziawg/ 2>/dev/null || echo "❌ Feed directory not found"
           
-          # Try to compile available packages one by one
-          AMNEZIA_PACKAGES=(
-            "kmod-amneziawg"
-            "amneziawg-tools" 
-            "amneziawg-go"
-            "luci-proto-amneziawg"
-          )
-          
-          for pkg in "${AMNEZIA_PACKAGES[@]}"; do
-            echo "Building package: $pkg"
-            if make package/feeds/amneziawg/$pkg/compile V=s 2>&1 | tee /tmp/$pkg.log; then
-              echo "✅ $pkg compiled successfully"
+          # Check package directories
+          for pkg in amneziawg-go amneziawg-tools luci-proto-amneziawg; do
+            if [ -d "feeds/amneziawg/$pkg" ]; then
+              echo "✅ Found package: $pkg"
+              ls feeds/amneziawg/$pkg/Makefile >/dev/null 2>&1 && echo "  - Has Makefile" || echo "  - Missing Makefile"
             else
-              echo "❌ $pkg compilation failed, checking alternative paths..."
-              # Try alternative package path
-              make package/$pkg/compile V=s || echo "❌ $pkg failed completely"
+              echo "❌ Package not found: $pkg"
             fi
           done
+          
+          # Check for kernel module
+          if [ -d "feeds/amneziawg/amneziawg-linux-kernel-module" ]; then
+            echo "✅ Found kernel module source"
+          else
+            echo "❌ Kernel module source not found"
+          fi
+          
+          echo "=== Building AmneziaWG packages with detailed logging ==="
+          
+          # Try to build each package individually with full output
+          declare -A BUILD_STATUS
+          
+          # Build userspace tools first (doesn't require kernel)
+          echo "--- Building amneziawg-tools ---"
+          if make package/feeds/amneziawg/amneziawg-tools/compile V=s 2>&1 | tee /tmp/build-tools.log; then
+            BUILD_STATUS[tools]="SUCCESS"
+            echo "✅ amneziawg-tools built successfully"
+          else
+            BUILD_STATUS[tools]="FAILED"
+            echo "❌ amneziawg-tools build failed"
+            echo "Last 30 lines of build log:"
+            tail -30 /tmp/build-tools.log
+          fi
+          
+          # Build Go implementation
+          echo "--- Building amneziawg-go ---"
+          if make package/feeds/amneziawg/amneziawg-go/compile V=s 2>&1 | tee /tmp/build-go.log; then
+            BUILD_STATUS[go]="SUCCESS"
+            echo "✅ amneziawg-go built successfully"
+          else
+            BUILD_STATUS[go]="FAILED"
+            echo "❌ amneziawg-go build failed"
+            echo "Last 30 lines of build log:"
+            tail -30 /tmp/build-go.log
+          fi
+          
+          # Build kernel module (requires kernel headers)
+          echo "--- Building kmod-amneziawg ---"
+          if make package/kernel/linux/compile M=feeds/amneziawg/amneziawg-linux-kernel-module V=s 2>&1 | tee /tmp/build-kmod.log; then
+            BUILD_STATUS[kmod]="SUCCESS"
+            echo "✅ kmod-amneziawg built successfully"
+          else
+            BUILD_STATUS[kmod]="FAILED"
+            echo "❌ kmod-amneziawg build failed"
+            echo "Last 30 lines of build log:"
+            tail -30 /tmp/build-kmod.log
+          fi
+          
+          # Build LuCI interface
+          echo "--- Building luci-proto-amneziawg ---"
+          if make package/feeds/amneziawg/luci-proto-amneziawg/compile V=s 2>&1 | tee /tmp/build-luci.log; then
+            BUILD_STATUS[luci]="SUCCESS"
+            echo "✅ luci-proto-amneziawg built successfully"
+          else
+            BUILD_STATUS[luci]="FAILED"
+            echo "❌ luci-proto-amneziawg build failed"
+            echo "Last 30 lines of build log:"
+            tail -30 /tmp/build-luci.log
+          fi
+          
+          # Summary
+          echo "=== Build Summary ==="
+          for pkg in tools go kmod luci; do
+            echo "$pkg: ${BUILD_STATUS[$pkg]}"
+          done
+          
+          # Save build logs
+          mkdir -p /tmp/build-logs
+          cp /tmp/build-*.log /tmp/build-logs/ 2>/dev/null || true
 
       - name: Install packages and create IPKs
         run: |
@@ -372,6 +446,7 @@ jobs:
           find feeds -name "*amneziawg*" -type d 2>/dev/null | head -5
 
       - name: Prepare artifacts - IPK files only
+        continue-on-error: true
         run: |
           cd project/friendlywrt
           ARTIFACT_DIR=../../artifact/amneziawg-packages/${{ matrix.target_cpu }}
@@ -379,35 +454,43 @@ jobs:
           
           echo "=== Searching for IPK files only ==="
           
-          # Find and copy ONLY .ipk files
+          # Find and copy ONLY .ipk files related to AmneziaWG
           IPK_COUNT=0
           
-          # Search in bin directory (standard location for built packages)
+          # Search specifically for AmneziaWG IPKs
           if [ -d "bin" ]; then
             echo "Searching in bin directory..."
-            while IFS= read -r -d '' file; do
-              cp "$file" "${ARTIFACT_DIR}/"
-              echo "✅ Found: $(basename "$file")"
-              ((IPK_COUNT++))
-            done < <(find bin -name "*.ipk" -type f -print0 2>/dev/null)
-          fi
-          
-          # If no IPKs found in bin, try build_dir
-          if [ $IPK_COUNT -eq 0 ]; then
-            echo "No IPKs in bin, searching build_dir..."
-            while IFS= read -r -d '' file; do
-              # Only copy if it contains amneziawg or crypto in the name
-              if [[ $(basename "$file") =~ (amneziawg|crypto) ]]; then
+            while IFS= read -r file; do
+              filename=$(basename "$file")
+              # Only copy AmneziaWG and required crypto packages
+              if [[ "$filename" =~ (amneziawg|crypto-chacha|crypto-poly|crypto-curve|crypto-blake|crypto-kpp|crypto-hash) ]]; then
                 cp "$file" "${ARTIFACT_DIR}/"
-                echo "✅ Found: $(basename "$file")"
+                echo "✅ Found: $filename"
                 ((IPK_COUNT++))
               fi
-            done < <(find build_dir -name "*.ipk" -type f -print0 2>/dev/null)
+            done < <(find bin -name "*.ipk" -type f 2>/dev/null)
           fi
           
-          echo "=== Total IPK files found: $IPK_COUNT ==="
+          # If still no IPKs, try build_dir
+          if [ $IPK_COUNT -eq 0 ]; then
+            echo "No IPKs in bin, searching build_dir..."
+            while IFS= read -r file; do
+              filename=$(basename "$file")
+              if [[ "$filename" =~ amneziawg ]]; then
+                cp "$file" "${ARTIFACT_DIR}/"
+                echo "✅ Found: $filename"
+                ((IPK_COUNT++))
+              fi
+            done < <(find build_dir -name "*.ipk" -type f 2>/dev/null)
+          fi
           
-          # Create build report
+          echo "=== Total AmneziaWG IPK files found: $IPK_COUNT ==="
+          
+          # Copy build logs
+          mkdir -p "${ARTIFACT_DIR}/logs"
+          cp /tmp/build-*.log "${ARTIFACT_DIR}/logs/" 2>/dev/null || true
+          
+          # Create detailed build report
           cat > "${ARTIFACT_DIR}/build-report.txt" << EOF
           AmneziaWG Build Report
           =====================
@@ -419,29 +502,60 @@ jobs:
           
           IPK Packages Found: $IPK_COUNT
           
-          Package List:
-          $(ls -lh "${ARTIFACT_DIR}"/*.ipk 2>/dev/null || echo "No IPK files")
+          === Package List ===
+          $(ls -lh "${ARTIFACT_DIR}"/*.ipk 2>/dev/null || echo "No IPK files found")
           
-          Architecture Mapping for ${{ matrix.target_cpu }}:
+          === Expected Packages ===
+          - kmod-amneziawg_*.ipk (kernel module)
+          - amneziawg-tools_*.ipk (wg/awg tools)
+          - amneziawg-go_*.ipk (Go implementation)
+          - luci-proto-amneziawg_*.ipk (web UI)
+          - kmod-crypto-* (crypto dependencies)
+          
+          === Architecture ===
           EOF
           
           case ${{ matrix.target_cpu }} in
             rk3328|rk3528)
-              echo "  Architecture: aarch64_cortex-a53" >> "${ARTIFACT_DIR}/build-report.txt"
+              echo "aarch64_cortex-a53" >> "${ARTIFACT_DIR}/build-report.txt"
               ;;
             rk3399|rk3576)
-              echo "  Architecture: aarch64_cortex-a72_cortex-a53" >> "${ARTIFACT_DIR}/build-report.txt"
+              echo "aarch64_cortex-a72_cortex-a53" >> "${ARTIFACT_DIR}/build-report.txt"
               ;;
             rk3566|rk3568)
-              echo "  Architecture: aarch64_cortex-a55" >> "${ARTIFACT_DIR}/build-report.txt"
+              echo "aarch64_cortex-a55" >> "${ARTIFACT_DIR}/build-report.txt"
               ;;
             rk3588)
-              echo "  Architecture: aarch64_cortex-a76_cortex-a55" >> "${ARTIFACT_DIR}/build-report.txt"
+              echo "aarch64_cortex-a76_cortex-a55" >> "${ARTIFACT_DIR}/build-report.txt"
               ;;
             *)
-              echo "  Architecture: aarch64_generic" >> "${ARTIFACT_DIR}/build-report.txt"
+              echo "aarch64_generic" >> "${ARTIFACT_DIR}/build-report.txt"
               ;;
           esac
+          
+          # Add diagnostic info if no packages found
+          if [ $IPK_COUNT -eq 0 ]; then
+            cat >> "${ARTIFACT_DIR}/build-report.txt" << 'DIAG'
+          
+          === Build Failed - Diagnostic Info ===
+          
+          Feed Directory Status:
+          DIAG
+            ls -la feeds/amneziawg/ 2>&1 >> "${ARTIFACT_DIR}/build-report.txt" || echo "Feed not found" >> "${ARTIFACT_DIR}/build-report.txt"
+            
+            echo "" >> "${ARTIFACT_DIR}/build-report.txt"
+            echo "Build Logs Summary:" >> "${ARTIFACT_DIR}/build-report.txt"
+            echo "See logs/ directory for detailed build output" >> "${ARTIFACT_DIR}/build-report.txt"
+            
+            # Add snippets from build logs
+            for log in /tmp/build-*.log; do
+              if [ -f "$log" ]; then
+                echo "" >> "${ARTIFACT_DIR}/build-report.txt"
+                echo "=== $(basename $log) (last 20 lines) ===" >> "${ARTIFACT_DIR}/build-report.txt"
+                tail -20 "$log" >> "${ARTIFACT_DIR}/build-report.txt"
+              fi
+            done
+          fi
           
           # Create installation instructions
           cat > "${ARTIFACT_DIR}/INSTALL.txt" << 'EOF'
@@ -450,29 +564,30 @@ jobs:
           
           Prerequisites:
           - FriendlyWrt router with internet access
-          - SSH or web access to router
+          - SSH access to router
+          - Compatible architecture (check build-report.txt)
           
           Installation Steps:
           
           1. Upload IPK files to router:
-             scp *.ipk root@192.168.x.x:/tmp/
+             scp *.ipk root@YOUR_ROUTER_IP:/tmp/
           
-          2. SSH to router and install packages:
-             ssh root@192.168.x.x
+          2. SSH to router:
+             ssh root@YOUR_ROUTER_IP
              cd /tmp
-             
-          3. Install in this order:
-             # Crypto dependencies (if present)
+          
+          3. Install packages in order:
+             # Install crypto dependencies first
              opkg install kmod-crypto-*.ipk
              
-             # AmneziaWG kernel module
+             # Install AmneziaWG kernel module
              opkg install kmod-amneziawg*.ipk
              
-             # Userspace tools
+             # Install userspace tools
              opkg install amneziawg-tools*.ipk
              opkg install amneziawg-go*.ipk
              
-             # LuCI web interface (optional)
+             # Install LuCI web interface (optional)
              opkg install luci-proto-amneziawg*.ipk
           
           4. Reboot router:
@@ -480,36 +595,34 @@ jobs:
           
           5. Verify installation:
              awg --version
-             
-          Configuration:
-          - Web UI: System > Network > Interfaces > Add new interface
-          - CLI: /etc/config/network
+             lsmod | grep amneziawg
+          
+          Configuration via Web UI:
+          - Navigate to Network > Interfaces
+          - Click "Add new interface"
+          - Select "AmneziaWG VPN" protocol
+          
+          Configuration via CLI:
+          - Edit /etc/config/network
+          - Or use: awg-quick up wg0
           
           Troubleshooting:
-          - If "Unknown package" error: check architecture compatibility
-          - If kernel module fails: ensure kernel version matches
-          - Logs: logread | grep amneziawg
+          - Architecture mismatch: verify build-report.txt architecture matches your device
+          - Kernel version mismatch: ensure FriendlyWrt version compatibility
+          - Missing dependencies: opkg update && opkg install <missing-package>
+          - Check logs: logread | grep -i amnezia
           
-          For manual compilation or issues, see:
-          https://github.com/kozhini/amneziawg-openwrt
+          If no IPK files in this release:
+          - Build failed, check build-report.txt and logs/
+          - Try building directly on target device
+          - Report issue at: https://github.com/kozhini/amneziawg-openwrt/issues
           EOF
           
-          # Save build logs if IPK count is 0
-          if [ $IPK_COUNT -eq 0 ]; then
-            echo "=== Build failed, saving diagnostic logs ===" >> "${ARTIFACT_DIR}/build-report.txt"
-            echo "" >> "${ARTIFACT_DIR}/build-report.txt"
-            echo "Feed Status:" >> "${ARTIFACT_DIR}/build-report.txt"
-            ls -la feeds/amneziawg/ 2>&1 >> "${ARTIFACT_DIR}/build-report.txt" || echo "Feed not found" >> "${ARTIFACT_DIR}/build-report.txt"
-            echo "" >> "${ARTIFACT_DIR}/build-report.txt"
-            echo "Recent Build Errors:" >> "${ARTIFACT_DIR}/build-report.txt"
-            find logs -name "*.log" -exec grep -l "amneziawg" {} \; 2>/dev/null | head -2 | while read log; do
-              echo "=== $log ===" >> "${ARTIFACT_DIR}/build-report.txt"
-              tail -50 "$log" >> "${ARTIFACT_DIR}/build-report.txt"
-            done 2>&1 >> "${ARTIFACT_DIR}/build-report.txt"
-          fi
+          echo "=== Final artifact directory ==="
+          ls -lh "${ARTIFACT_DIR}/" || true
           
-          echo "=== Final artifact directory contents ==="
-          ls -lh "${ARTIFACT_DIR}/"
+          # Exit with success even if no IPKs found (for artifact upload)
+          exit 0
 
       - name: Upload IPK packages to draft release
         if: always()
@@ -520,4 +633,5 @@ jobs:
           tag_name: ${{ needs.prepare_release.outputs.release_tag }}
           files: |
             artifact/amneziawg-packages/${{ matrix.target_cpu }}/*.ipk
+            artifact/amneziawg-packages/${{ matrix.target_cpu }}/INSTALL.txt
             artifact/amneziawg-packages/${{ matrix.target_cpu }}/build-report.txt
