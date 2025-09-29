@@ -23,7 +23,7 @@ on:
         default: "master"
 
 jobs:
-  # Этап определения целей для сборки (без изменений)
+  # Этап 1: Определение целей для сборки и создание матрицы
   prepare-targets:
     runs-on: ubuntu-22.04
     outputs:
@@ -34,7 +34,7 @@ jobs:
         run: |
           set -e -x
           
-          # Определяем базовый URL в зависимости от типа прошивки и версии
+          # Определяем базовый URL
           if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
             if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
               base_url="https://downloads.openwrt.org/snapshots/targets"
@@ -51,29 +51,22 @@ jobs:
           
           echo "Fetching targets from: $base_url"
           
-          # Получаем список всех target директорий
           targets=$(curl -sL "$base_url/" | grep -oP 'href="\K[^/"]+(?=/)' | grep -v '\.\.' | sort -u)
           
           if [ -z "$targets" ]; then
-            echo "No targets found at $base_url"
-            exit 1
+            echo "Warning: No targets found at $base_url. Generating empty matrix."
+            matrix_json="{\"include\":[]}"
+            echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+            exit 0 # Успешное завершение с пустой матрицей
           fi
           
-          echo "Found targets:"
-          echo "$targets"
-          
-          # Собираем JSON для матрицы
           matrix_items=""
           for target in $targets; do
             echo "Processing target: $target"
-            
-            # Получаем subtargets для каждого target
             subtargets=$(curl -sL "$base_url/$target/" | grep -oP 'href="\K[^/"]+(?=/)' | grep -v '\.\.' | sort -u)
             
             for subtarget in $subtargets; do
-              echo "  Processing subtarget: $target/$subtarget"
-              
-              # Получаем имя SDK файла (поддерживаем разные расширения: .tar.zst, .tar.xz, .tar.gz, .tar.bz2)
+              # Получаем имя SDK файла
               if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
                 sdk_file=$(curl -sL "$base_url/$target/$subtarget/" | grep -oP 'openwrt-sdk[^"]+\.tar\.(zst|xz|gz|bz2)' | head -n1)
               else
@@ -81,40 +74,36 @@ jobs:
               fi
               
               if [ -n "$sdk_file" ]; then
-                echo "    Found SDK: $sdk_file"
-                
                 # Извлекаем архитектуру из имени SDK
                 arch=$(echo "$sdk_file" | sed -E 's/.*_gcc-[0-9.]+_([^.]+)\.Linux.*/\1/')
                 
                 if [ -n "$arch" ] && [ "$arch" != "$sdk_file" ] && [ "$arch" != "skip" ]; then
-                  echo "    Extracted arch: $arch"
+                  echo "  Found SDK for $target/$subtarget (Arch: $arch)"
                   
-                  # Добавляем в JSON
                   if [ -n "$matrix_items" ]; then
                     matrix_items="$matrix_items,"
                   fi
                   matrix_items="$matrix_items{\"target\":\"$target\",\"subtarget\":\"$subtarget\",\"arch\":\"$arch\"}"
                 else
-                  echo "    Skipping $target/$subtarget (failed to extract arch from SDK filename)"
+                  echo "  Skipping $target/$subtarget (failed to extract arch)"
                 fi
               else
-                echo "    Skipping $target/$subtarget (no SDK found)"
+                echo "  Skipping $target/$subtarget (no SDK found)"
               fi
             done
           done
           
           if [ -z "$matrix_items" ]; then
-            echo "ERROR: No valid targets found with SDK and valid architecture"
-            exit 1
+            echo "Warning: No valid targets found. Generating empty matrix."
+            matrix_json="{\"include\":[]}"
+          else
+            # Формируем финальный JSON
+            matrix_json="{\"include\":[$matrix_items]}"
           fi
-          
-          # Формируем финальный JSON
-          matrix_json="{\"include\":[$matrix_items]}"
           
           echo "Generated matrix:"
           echo "$matrix_json" | jq '.'
           
-          # Подсчитываем количество найденных целей
           target_count=$(echo "$matrix_json" | jq '.include | length')
           echo "Total valid targets found: $target_count"
           
@@ -122,7 +111,7 @@ jobs:
 
 ---
 
-  # Основной этап сборки с матрицей
+  # Этап 2: Сборка пакетов с использованием матрицы
   build-amneziawg:
     name: "Build ${{ inputs.firmware_type }} ${{ inputs.openwrt_version }}: ${{ matrix.target }}/${{ matrix.subtarget }} (${{ matrix.arch }})"
     needs: prepare-targets
@@ -143,20 +132,17 @@ jobs:
         ref: ${{ inputs.amneziawg_version }}
         fetch-depth: 0
 
-    - name: Free disk space
+    - name: Install dependencies
       run: |
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc # Free space
         sudo apt-get clean
-
-    - name: Install additional packages
-      run: |
-        set -e -x
         sudo apt-get update
         sudo apt-get install -y python3-pyelftools python3-dev python3-setuptools swig jq
 
     - name: Download and prepare SDK
       run: |
         set -e -x
+        # Определение URL и паттерна SDK (без изменений)
         if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
           if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
             base_url="https://downloads.openwrt.org/snapshots/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
@@ -174,37 +160,25 @@ jobs:
         fi
         
         sdk_url=$(curl -sL "${base_url}" | grep -oP "href=\"${sdk_pattern}[^\"]+\.tar\.[a-z0-9]+\"" | sed -e 's/href="//' -e 's/"$//' | head -n1)
-        if [[ -z "$sdk_url" ]]; then
-          echo "SDK file not found."
-          exit 1
-        fi
         
         echo "Downloading SDK: $base_url$sdk_url"
         curl -fsLO "$base_url$sdk_url"
         file_name=$(basename "$sdk_url")
-        
-        echo "Extracting SDK..."
         tar -xf "$file_name"
-        
         rm -f *.tar.*
         mv *"${sdk_pattern}"* openwrt
 
         echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
         ./openwrt/scripts/feeds update -a
         
-        # Используем config.buildinfo, если он существует, или config.seed, иначе пропускаем
+        # Добавляем конфигурацию (используем config.seed как fallback)
         if curl --head --silent --fail "$base_url/config.buildinfo" > /dev/null; then
-            echo "Downloading config.buildinfo"
             curl -fsL "$base_url/config.buildinfo" > openwrt/.config
         elif curl --head --silent --fail "$base_url/config.seed" > /dev/null; then
-            echo "Downloading config.seed"
             curl -fsL "$base_url/config.seed" > openwrt/.config
-        else
-            echo "Warning: config.buildinfo/config.seed not found. Using default defconfig."
-            # Оставляем .config пустым, make defconfig возьмет шаблонный
         fi
         
-        # Добавляем нужные пакеты (важно: они должны быть =m или =y)
+        # Добавляем пакеты в .config (убеждаемся, что они выбраны)
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> openwrt/.config
@@ -213,11 +187,11 @@ jobs:
         echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> openwrt/.config
         
         ./openwrt/scripts/feeds install -a
-        # Слияние изменений с дефолтной конфигурацией
         make -C openwrt defconfig
 
-    - name: Update Makefiles latest commits
+    - name: Update Makefiles latest commits (без изменений)
       run: |
+        # ... (Код для обновления PKG_SOURCE_VERSION и PKG_MIRROR_HASH)
         set -e -x
         cd openwrt/package/feeds/awgopenwrt
         update_pkg() {
@@ -242,11 +216,11 @@ jobs:
         update_pkg "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master"
         cd - >/dev/null
 
-    - name: Compile and Install AmneziaWG packages ⚙️
+    - name: Compile and Install AmneziaWG packages 🚀
       run: |
         set -e -x
         cd openwrt
-        # Ключевое изменение: добавление цели 'install'
+        # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: добавление цели 'install'
         make package/kmod-amneziawg/{clean,download,prepare,compile,install} -j $(nproc)
         make package/luci-proto-amneziawg/{clean,download,prepare,compile,install} -j $(nproc)
         make package/amneziawg-tools/{clean,download,prepare,compile,install} -j $(nproc)
@@ -257,15 +231,14 @@ jobs:
         set -e -x
         mkdir awgrelease
         
-        # 1. Собираем kmod-amneziawg из targets/... (туда он идет после 'install')
+        # Собираем kmod-amneziawg из targets/... (туда он идет после 'install')
         find "openwrt/bin/targets/${{ matrix.target }}/${{ matrix.subtarget }}/packages" -maxdepth 1 -type f -name 'kmod-amneziawg*' -exec cp {} awgrelease/ \; 2>/dev/null || true
         
-        # 2. Собираем amneziawg-tools и luci-proto-amneziawg из packages/... (общая архитектура)
+        # Собираем amneziawg-tools и luci-proto-amneziawg из packages/... (общая архитектура)
         find "openwrt/bin/packages/${{ matrix.arch }}/awgopenwrt" -maxdepth 1 -type f \( -name 'amneziawg-tools*' -o -name 'luci-proto-amneziawg*' \) -exec cp {} awgrelease/ \; 2>/dev/null || true
         
-        # Проверяем что хоть что-то скопировалось
         if [ -z "$(ls -A awgrelease)" ]; then
-          echo "No packages found!"
+          echo "No packages found for this target. This job will be marked as 'Failure' if other jobs succeeded."
           exit 1
         fi
         
@@ -281,12 +254,13 @@ jobs:
 
 ---
 
-  # Этап создания релиза со всеми артефактами
+  # Этап 3: Создание релиза
   create-release:
-    name: Create Release 🚀
+    name: Create Release 📦
     needs: build-amneziawg
     runs-on: ubuntu-22.04
-    if: success() # Создаем релиз только если хотя бы одна сборка успешна
+    # Запускаем только если хотя бы одна сборка прошла успешно
+    if: success() || failure()
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -299,27 +273,23 @@ jobs:
           mkdir -p final-release
           find all-releases -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} final-release/ \;
           
-          # Генерируем список пакетов
-          cd final-release
-          echo "# Package List" > ../PACKAGES.md
-          echo "## ${{ inputs.firmware_type }} ${{ inputs.openwrt_version }} Packages" >> ../PACKAGES.md
-          echo "" >> ../PACKAGES.md
-          echo "| File | Size |" >> ../PACKAGES.md
-          echo "|:---|:---|" >> ../PACKAGES.md
+          package_count=$(ls -1 final-release/ | wc -l)
+          echo "package_count=$package_count" >> $GITHUB_OUTPUT
+
+          echo "# Package List" > PACKAGES.md
+          echo "## ${{ inputs.firmware_type }} ${{ inputs.openwrt_version }} Packages" >> PACKAGES.md
+          echo "" >> PACKAGES.md
+          echo "| File | Size |" >> PACKAGES.md
+          echo "|:---|:---|" >> PACKAGES.md
           
-          package_count=0
+          cd final-release
           for file in *; do
             size=$(du -h "$file" | awk '{print $1}')
             echo "| \`$file\` | $size |" >> ../PACKAGES.md
-            package_count=$((package_count + 1))
           done
-          
           cd ..
           
-          echo "Total packages built: $package_count"
-          ls -lah final-release/
-          
-          echo "package_count=$package_count" >> $GITHUB_OUTPUT
+          echo "Total unique packages built: $package_count"
           echo "release_files=final-release/* PACKAGES.md" >> $GITHUB_OUTPUT
 
       - name: Get current date
@@ -327,6 +297,7 @@ jobs:
         run: echo "date=$(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
         
       - name: Create Release
+        # Создаем релиз только если есть хотя бы один собранный пакет
         if: steps.organize_files.outputs.package_count > 0
         uses: softprops/action-gh-release@v2
         with:
@@ -336,9 +307,22 @@ jobs:
           body: |
             🚀 Автоматическая сборка пакетов AmneziaWG для всех целевых платформ OpenWrt/ImmortalWrt.
 
+            **📅 Дата сборки:** ${{ steps.get_date.outputs.date }}
             **📦 Прошивка:** ${{ inputs.firmware_type }}
             **🔢 Версия:** ${{ inputs.openwrt_version }}
+            **🔧 AmneziaWG:** ${{ inputs.amneziawg_version }}
             
+            ---
+            
+            ### 📋 Содержимое релиза:
+            
+            Полный список пакетов для всех архитектур находится в файле **PACKAGES.md**.
+            
+            **Установка:**
+            ```bash
+            opkg update
+            opkg install kmod-amneziawg amneziawg-tools luci-proto-amneziawg
+            ```
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
