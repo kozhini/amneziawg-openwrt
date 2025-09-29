@@ -1,0 +1,62 @@
+name: Build (Generated)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Setup build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev
+
+      - name: Prepare version
+        id: vars
+        run: |
+          TAG_DATE=$(date +'%Y%m%d')
+          echo "TAG_DATE=$TAG_DATE" >> $GITHUB_ENV
+          echo "BUILD_TAG=build-${TAG_DATE}" >> $GITHUB_ENV
+
+      - name: Build package
+        run: |
+          make -j$(nproc)
+
+      - name: Archive artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ env.TAG_DATE }}
+          path: |
+            bin/*
+            dist/*
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/heads/master') || startsWith(github.ref, 'refs/heads/main')
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ env.TAG_DATE }}
+          path: release
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.BUILD_TAG }}
+          name: Release ${{ env.BUILD_TAG }}
+          files: release/**
