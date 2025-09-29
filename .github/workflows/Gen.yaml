@@ -1,20 +1,23 @@
-name: Generate and Dispatch Build Workflow
+name: Generate Build Matrix
 
 on:
   workflow_dispatch:
     inputs:
       firmware_type:
+        description: "Firmware type"
         type: choice
         required: true
-        default: "immortalwrt"
+        default: "openwrt"
         options:
           - "openwrt"
           - "immortalwrt"
       openwrt_version:
+        description: "OpenWrt/ImmortalWrt version"
         type: string
         required: true
-        default: "24.10.2"
+        default: "24.10.3"
       amneziawg_version:
+        description: "AmneziaWG version"
         type: string
         required: true
         default: "master"
@@ -23,68 +26,65 @@ jobs:
   generate:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - name: Install deps
-        run: sudo apt-get update && sudo apt-get install -y jq curl
-
-      - name: Fetch targets and generate matrix
-        id: gen
+      - name: Parse targets list
+        id: parse
         run: |
-          set -e -x
-          version="${{ inputs.openwrt_version }}"
-          fw="${{ inputs.firmware_type }}"
-
-          if [ "$fw" = "openwrt" ]; then
-            base="https://downloads.openwrt.org/releases/$version/targets"
-            sdk_pat="openwrt-sdk"
+          set -e
+          if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
+            base_url="https://downloads.openwrt.org/releases/${{ inputs.openwrt_version }}/targets/"
           else
-            base="https://downloads.immortalwrt.org/releases/$version/targets"
-            sdk_pat="immortalwrt-sdk"
+            base_url="https://downloads.immortalwrt.org/releases/${{ inputs.openwrt_version }}/targets/"
           fi
 
-          matrix="[]"
+          echo "Fetching targets from $base_url"
+          targets=$(curl -s "$base_url" | grep -oP '(?<=href=")[^"/]+(?=/")')
+          echo "Found targets: $targets"
 
-          for target in $(curl -s $base/ | grep -oE 'href="[^/]+/' | sed 's/href="//;s/\/$//'); do
-            for sub in $(curl -s $base/$target/ | grep -oE 'href="[^/]+/' | sed 's/href="//;s/\/$//'); do
-              cfg="$base/$target/$sub/config.buildinfo"
-              arch=$(curl -fsL "$cfg" | grep '^CONFIG_TARGET_ARCH_PACKAGES=' | cut -d'"' -f2 || true)
-              if [ -n "$arch" ]; then
-                matrix=$(echo "$matrix" | jq ". + [{\"arch\":\"$arch\",\"target\":\"$target\",\"subtarget\":\"$sub\"}]")
+          # Собираем JSON для матрицы
+          matrix="["
+          first=true
+          for t in $targets; do
+            subs=$(curl -s "$base_url$t/" | grep -oP '(?<=href=")[^"/]+(?=/")')
+            for s in $subs; do
+              if [ "$first" = true ]; then
+                first=false
+              else
+                matrix="$matrix,"
               fi
+              matrix="$matrix{\"target\":\"$t\",\"subtarget\":\"$s\"}"
             done
           done
+          matrix="$matrix]"
 
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
 
-      - name: Generate workflow file
+      - name: Generate build-generated.yml
         run: |
           cat > .github/workflows/build-generated.yml <<'EOF'
-          name: Build AmneziaWG (Generated)
+          name: Build AmneziaWG from OpenWRT/ImmortalWRT
 
           on:
             workflow_dispatch:
 
           jobs:
             build:
+              name: Build for matrix
+              runs-on: ubuntu-22.04
               strategy:
                 fail-fast: false
-                matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
-              runs-on: ubuntu-22.04
+                matrix: ${{ fromJSON(needs.generate.outputs.matrix) }}
               steps:
-                - run: echo "Arch ${{ matrix.arch }}, Target ${{ matrix.target }}, Subtarget ${{ matrix.subtarget }}"
+                - name: Checkout repo
+                  uses: actions/checkout@v4
           EOF
 
       - name: Commit generated workflow
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/build-generated.yml
-          git commit -m "Update generated build workflow" || echo "No changes"
+          git commit -m "Update build-generated.yml from matrix"
           git push
-
-      - name: Trigger generated workflow
-        run: |
-          gh workflow run build-generated.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
