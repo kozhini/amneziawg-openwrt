@@ -87,7 +87,7 @@ jobs:
           sudo -E bash ./install.sh
           
           # Install Go
-          GO_VERSION=1.25.1
+          GO_VERSION=1.24.7
           wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz
           sudo rm -rf /usr/local/go
           sudo tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz
@@ -233,13 +233,13 @@ jobs:
 
       - name: Download packages
         run: |
-          cd project/friendlywrt
+          cd friendlywrt-project/friendlywrt
           make download -j$(nproc)
           find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
 
       - name: Prepare kernel for module compilation
         run: |
-          cd project/friendlywrt
+          cd friendlywrt-project/friendlywrt
           
           echo "=== Preparing kernel for module compilation ==="
           # Prepare kernel headers and build environment
@@ -260,7 +260,7 @@ jobs:
 
       - name: Verify kernel source and NEON crypto support
         run: |
-          cd project/friendlywrt
+          cd friendlywrt-project/friendlywrt
           
           echo "=== Checking kernel source ==="
           if [ -d "target/linux/rockchip" ]; then
@@ -295,7 +295,7 @@ jobs:
 
       - name: Build toolchain and host tools
         run: |
-          cd project/friendlywrt
+          cd friendlywrt-project/friendlywrt
           
           echo "=== Building essential host tools ==="
           # Build essential tools including usign for package signing
@@ -481,7 +481,7 @@ jobs:
 
       - name: Debug build results and search for packages
         run: |
-          cd project/friendlywrt
+          cd friendlywrt-project/friendlywrt
           
           echo "=== Comprehensive package search ==="
           # Search in all possible locations
