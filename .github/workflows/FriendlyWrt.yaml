@@ -184,18 +184,24 @@ jobs:
           find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
 
       # --- 4. Сборка Toolchain и Kernel (ИСПРАВЛЕНИЕ KMOD) ---
-      - name: Build Toolchain, Host Tools and Install Kernel Headers (FIX KMOD)
+      - name: Build Toolchain, Host Tools and Install Kernel Headers (FIX KMOD - Throttled)
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== Building essential toolchain and host tools ==="
-          make tools/install -j$(nproc) V=s || true
-          make toolchain/install -j$(nproc) V=s || true
+          # 💡 FIX: Ограничение потоков для предотвращения OOM/Тайм-аута во время самой тяжелой компиляции.
           
-          echo "=== Installing target environment and kernel headers (FIX KMOD) ==="
-          # 👈 FIX: Используем INSTALL для гарантии, что заголовки ядра попадут в staging_dir
-          make target/install V=s
-          make target/linux/install V=s
+          echo "=== 1/4: Building essential tools (Throttled to -j1) ==="
+          make tools/install -j1 V=s || true
+          
+          echo "=== 2/4: Building toolchain (Throttled to -j1) ==="
+          make toolchain/install -j1 V=s || true
+          
+          # Используем все потоки для более быстрых операций установки заголовков
+          echo "=== 3/4: Installing target environment (Full speed) ==="
+          make target/install -j$(nproc) V=s
+          
+          echo "=== 4/4: Installing kernel headers (Full speed) ==="
+          make target/linux/install -j$(nproc) V=s
 
       - name: Build crypto dependencies (kmod-* packages)
         run: |
