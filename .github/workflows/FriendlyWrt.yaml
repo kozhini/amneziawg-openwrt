@@ -31,7 +31,7 @@ on:
 
 jobs:
   prepare_release:
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
     outputs:
       release_tag: ${{ steps.release_tag.outputs.release_tag }}
     steps:
@@ -52,7 +52,7 @@ jobs:
 
   build_amneziawg:
     needs: prepare_release
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
     strategy:
       matrix:
         target_cpu: ${{ inputs.target_cpu && fromJson(format('["{0}"]', inputs.target_cpu)) || fromJson('["rk3328","rk3399","rk3566","rk3568","rk3576","rk3588"]') }}
