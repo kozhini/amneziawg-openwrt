@@ -153,26 +153,24 @@ jobs:
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # Запускаем defconfig, чтобы избежать ошибки "unknown terminal" на следующем make
           make defconfig 
           
-          # Конфигурация для AmneziaWG (без GO)
           cat >> .config << EOF
           CONFIG_TARGET_rockchip=y
           CONFIG_TARGET_rockchip_armv8=y
           CONFIG_PACKAGE_kmod-amneziawg=m
           CONFIG_PACKAGE_amneziawg-tools=m
           CONFIG_PACKAGE_luci-proto-amneziawg=m
-          CONFIG_PACKAGE_kmod-crypto-aead=m
-          CONFIG_PACKAGE_kmod-crypto-hash=m
-          CONFIG_PACKAGE_kmod-crypto-kpp=m
-          CONFIG_PACKAGE_kmod-crypto-skcipher=m
-          CONFIG_PACKAGE_kmod-crypto-manager2=m
-          CONFIG_CRYPTO_BLAKE2S=y
+          # CONFIG_PACKAGE_kmod-crypto-aead=m
+          # CONFIG_PACKAGE_kmod-crypto-hash=m
+          # CONFIG_PACKAGE_kmod-crypto-kpp=m
+          # CONFIG_PACKAGE_kmod-crypto-skcipher=m
+          # CONFIG_PACKAGE_kmod-crypto-manager2=m
+          # CONFIG_CRYPTO_BLAKE2S=y
           CONFIG_CRYPTO_CHACHA20=y
           CONFIG_CRYPTO_CHACHA20POLY1305=y
           CONFIG_CRYPTO_POLY1305=y
-          CONFIG_CRYPTO_CURVE25519=y
+          # CONFIG_CRYPTO_CURVE25519=y
           EOF
           
           make defconfig
@@ -188,7 +186,6 @@ jobs:
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # 💡 FIX: Ограничение потоков для предотвращения OOM/Тайм-аута во время самой тяжелой компиляции.
           
           echo "=== 1/4: Building essential tools (Throttled to -j1) ==="
           make tools/install -j1 V=s || true
@@ -196,7 +193,6 @@ jobs:
           echo "=== 2/4: Building toolchain (Throttled to -j1) ==="
           make toolchain/install -j1 V=s || true
           
-          # Используем все потоки для более быстрых операций установки заголовков
           echo "=== 3/4: Installing target environment (Full speed) ==="
           make target/install -j$(nproc) V=s
           
