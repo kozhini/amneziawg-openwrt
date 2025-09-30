@@ -31,15 +31,14 @@ on:
 
 jobs:
   prepare_release:
-    runs-on: self-hosted # 👈 ИСПОЛЬЗУЕМ SELF-HOSTED
+    runs-on: self-hosted
     outputs:
       release_tag: ${{ steps.release_tag.outputs.release_tag }}
     
     steps:
       - name: Generate release tag (PowerShell Syntax)
         id: release_tag
-        # 👈 FIX 1: Используем PowerShell для Windows, чтобы получить дату в правильном формате
-        shell: powershell
+        shell: powershell # Используем PowerShell для Windows, чтобы получить дату
         run: |
           $timestamp = Get-Date -Format yyyyMMddHHmm
           $release_tag = "AmneziaWG-KMOD-FriendlyWrt-${{ inputs.friendlywrt_version }}-$timestamp"
@@ -57,9 +56,9 @@ jobs:
 
   build_amneziawg:
     needs: prepare_release
-    runs-on: self-hosted # 👈 ИСПОЛЬЗУЕМ SELF-HOSTED
+    runs-on: self-hosted
     
-    # 👈 FIX 2: Устанавливаем BASH как shell по умолчанию для всех Linux-команд
+    # 👈 FIX: Устанавливаем BASH как shell по умолчанию для всех Linux-команд
     defaults:
       run:
         shell: bash
@@ -75,7 +74,6 @@ jobs:
 
     steps:
       # --- 1. Подготовка репозиториев ---
-      # Примечание: uses: actions/checkout@v5 работает на Windows
       - name: Checkout main repository
         uses: actions/checkout@v5
         with:
@@ -90,35 +88,24 @@ jobs:
           fetch-depth: 0
 
       # --- 2. Инициализация окружения ---
-      # Примечание: В self-hosted runner на Windows нужно убедиться,
-      # что эти зависимости (или их эквиваленты) установлены заранее.
       - name: Initialize build environment (Ensure Linux Tools are Available)
         run: |
-          # В Windows self-hosted runner этот шаг служит для проверки,
-          # что Bash, Git и другие инструменты доступны.
-          if command -v bash >/dev/null 2>&1; then
-            echo "Bash is available."
-          else
-            echo "Error: Bash (Git Bash) is required but not found. Please install it."
+          if ! command -v bash >/dev/null 2>&1; then
+            echo "Error: Bash (Git Bash) is required but not found."
             exit 1
           fi
 
-          # Установка инструментария FriendlyWrt
           wget https://raw.githubusercontent.com/friendlyarm/build-env-on-ubuntu-bionic/master/install.sh
           # Sed-команды работают в Bash
           sed -i -e 's/^apt-get -y install openjdk-8-jdk/# apt-get -y install openjdk-8-jdk/g' install.sh
           sed -i -e 's/^\[ -d fa-toolchain \]/# [ -d fa-toolchain ]/g' install.sh
           sed -i -e 's/^(cat fa-toolchain/# (cat fa-toolchain/g' install.sh
           sed -i -e 's/^(tar xf fa-toolchain/# (tar xf fa-toolchain/g' install.sh
-          # Примечание: bash ./install.sh может потребовать sudo/root прав,
-          # которые могут быть недоступны в Windows Runner.
           bash ./install.sh
           
           git clone https://github.com/friendlyarm/repo
-          cp repo/repo /usr/bin/ || cp repo/repo /usr/local/bin/ || cp repo/repo /c/Windows/System32/
-          
-          # Очистка (команды Linux)
-          echo "Bypass sudo commands for cleaning on Windows runner"
+          # Копирование repo в PATH для Windows (используем /usr/bin, если Git Bash настроен)
+          cp repo/repo /usr/bin/ || echo "Warning: Could not copy repo to /usr/bin."
 
       # --- 3. Загрузка FriendlyWrt source (repo init/sync) ---
       - name: Download FriendlyWrt source (repo init/sync)
@@ -145,6 +132,7 @@ jobs:
           
           echo "src-cpy amneziawg ../../amneziawg-openwrt" >> feeds.conf.default
           
+          # Логика повторных попыток для устойчивости сети
           ATTEMPTS=3
           for i in $(seq 1 $ATTEMPTS); do
             echo "=== Attempt $i to update feeds... ==="
@@ -172,56 +160,45 @@ jobs:
           
           make defconfig
           
+          # 👈 ПРОВЕРКА: Весь блок 'EOF' должен быть корректно выровнен
           cat >> .config << EOF
-          # Target configuration (minimal)
-          CONFIG_TARGET_rockchip=y
-          CONFIG_TARGET_rockchip_armv8=y
-          
-          # Enable AmneziaWG packages (as modules 'm')
-          CONFIG_PACKAGE_kmod-amneziawg=m
-          CONFIG_PACKAGE_amneziawg-tools=m
-          CONFIG_PACKAGE_luci-proto-amneziawg=m
-          
-          # Required kernel crypto modules 
-          CONFIG_PACKAGE_kmod-crypto-aead=m
-          CONFIG_PACKAGE_kmod-crypto-hash=m
-          CONFIG_PACKAGE_kmod-crypto-kpp=m
-          CONFIG_PACKAGE_kmod-crypto-skcipher=m
-          CONFIG_PACKAGE_kmod-crypto-manager2=m
-          
-          # Specific crypto algorithms required 
-          CONFIG_CRYPTO_BLAKE2S=y
-          CONFIG_CRYPTO_CHACHA20=y
-          CONFIG_CRYPTO_CHACHA20POLY1305=y
-          CONFIG_CRYPTO_POLY1305=y
-          CONFIG_CRYPTO_CURVE25519=y
-          
-          # Disable building large images
-          # CONFIG_TARGET_ROOTFS_CPIOGZ is not set
-          # CONFIG_TARGET_ROOTFS_TARGZ is not set
-          # CONFIG_TARGET_ROOTFS_SQUASHFS is not set
+CONFIG_TARGET_rockchip=y
+CONFIG_TARGET_rockchip_armv8=y
+CONFIG_PACKAGE_kmod-amneziawg=m
+CONFIG_PACKAGE_amneziawg-tools=m
+CONFIG_PACKAGE_luci-proto-amneziawg=m
+CONFIG_PACKAGE_kmod-crypto-aead=m
+CONFIG_PACKAGE_kmod-crypto-hash=m
+CONFIG_PACKAGE_kmod-crypto-kpp=m
+CONFIG_PACKAGE_kmod-crypto-skcipher=m
+CONFIG_PACKAGE_kmod-crypto-manager2=m
+CONFIG_CRYPTO_BLAKE2S=y
+CONFIG_CRYPTO_CHACHA20=y
+CONFIG_CRYPTO_CHACHA20POLY1305=y
+CONFIG_CRYPTO_POLY1305=y
+CONFIG_CRYPTO_CURVE25519=y
+# CONFIG_TARGET_ROOTFS_CPIOGZ is not set
+# CONFIG_TARGET_ROOTFS_TARGZ is not set
+# CONFIG_TARGET_ROOTFS_SQUASHFS is not set
 EOF
           make defconfig
 
       - name: Download packages
         run: |
           cd ${{ env.BUILD_DIR }}
-          # Используем -j1 для загрузки, чтобы не перегружать сеть/диск
           make download -j1 
 
-      # --- 5. Сборка Toolchain и Kernel (Разделение для стабильности) ---
+      # --- 5. Сборка Toolchain и Kernel ---
       
       - name: Build Toolchain (Critical, Throttled to -j1)
         run: |
           cd ${{ env.BUILD_DIR }}
-          # Throttled to -j1 for maximum stability on any self-hosted machine
           make toolchain/install -j1 V=s
 
       - name: Build Host Tools and Install Kernel Headers (FIX KMOD)
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # Используем все потоки, так как эти шаги быстрее
           make tools/install -j$(nproc) V=s || true
           make target/install -j$(nproc) V=s
           make target/linux/install -j$(nproc) V=s
@@ -237,20 +214,16 @@ EOF
           cd ${{ env.BUILD_DIR }}
           
           KMOD_PATH=$(ls feeds/amneziawg/ | grep -E "kmod|linux-kernel-module" | head -1)
-          echo "KMOD_PATH=$KMOD_PATH" >> $GITHUB_ENV # Для использования в следующих шагах
+          echo "KMOD_PATH=$KMOD_PATH" >> $GITHUB_ENV
           
-          # 1. Build userspace tools
           make package/feeds/amneziawg/amneziawg-tools/compile -j$(nproc) V=s || true
           
-          # 2. Build kernel module
           if [ -n "$KMOD_PATH" ]; then
             make package/feeds/amneziawg/$KMOD_PATH/compile -j$(nproc) V=s || true
           fi
           
-          # 3. Build LuCI interface
           make package/feeds/amneziawg/luci-proto-amneziawg/compile -j$(nproc) V=s || true
           
-          # Install and Index
           make package/install -j$(nproc) V=s || true
           make package/index V=s
 
@@ -262,7 +235,6 @@ EOF
           ARTIFACT_DIR=artifact/amneziawg-packages/${{ matrix.target_cpu }}
           mkdir -p "${ARTIFACT_DIR}"
           
-          # Используем find и grep для поиска IPK
           find ${{ env.BUILD_DIR }}/bin -name "*.ipk" -type f 2>/dev/null | grep -E "amneziawg|crypto-aead|crypto-hash|crypto-kpp|crypto-skcipher|crypto-chacha|crypto-poly|crypto-curve|crypto-blake" | while read file; do
              cp "$file" "${ARTIFACT_DIR}/" && echo "✅ Found: $(basename "$file")" || true
           done
