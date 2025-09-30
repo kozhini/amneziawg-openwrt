@@ -180,24 +180,30 @@ jobs:
           cd ${{ env.BUILD_DIR }}
           make download -j$(nproc)
           find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
+      
+      # --- 4. Сборка Toolchain и Kernel (РАЗДЕЛЕНИЕ НА 2 ШАГА) ---
+      
+      - name: Build Toolchain (Critical, Throttled to -j1)
+        # 👈 FIX 1: Самый длинный и ресурсоемкий шаг запускается с одним потоком.
+        run: |
+          cd ${{ env.BUILD_DIR }}
+          echo "=== Building essential toolchain (STRONGLY THROTTLED -j1) ==="
+          make toolchain/install -j1 V=s
 
-      # --- 4. Сборка Toolchain и Kernel (ИСПРАВЛЕНИЕ KMOD) ---
-      - name: Build Toolchain, Host Tools and Install Kernel Headers (FIX KMOD - Throttled)
+      - name: Build Host Tools and Install Kernel Headers (FIX KMOD)
+        # 👈 FIX 2: Остальные, менее требовательные шаги, использующие все потоки.
         run: |
           cd ${{ env.BUILD_DIR }}
           
+          echo "=== Building host tools (Full Speed) ==="
+          make tools/install -j$(nproc) V=s || true
           
-          echo "=== 1/4: Building essential tools (Throttled to -j1) ==="
-          make tools/install -j1 V=s || true
-          
-          echo "=== 2/4: Building toolchain (Throttled to -j1) ==="
-          make toolchain/install -j1 V=s || true
-          
-          echo "=== 3/4: Installing target environment (Full speed) ==="
+          echo "=== Installing target environment and kernel headers (Full Speed) ==="
           make target/install -j$(nproc) V=s
-          
-          echo "=== 4/4: Installing kernel headers (Full speed) ==="
           make target/linux/install -j$(nproc) V=s
+          
+          echo "=== Checking headers ==="
+          find staging_dir -name "linux" -type d | head -3
 
       - name: Build crypto dependencies (kmod-* packages)
         run: |
@@ -205,12 +211,14 @@ jobs:
           echo "=== Building crypto kernel modules ==="
           make package/kernel/linux/compile -j$(nproc) V=s
 
-      # --- 5. Сборка AmneziaWG ---
-      - name: Build AmneziaWG packages (kmod, tools, luci)
+      # --- 5. Сборка AmneziaWG (Установка KMOD_PATH) ---
+      - name: Set KMOD_PATH and Build AmneziaWG packages
         run: |
           cd ${{ env.BUILD_DIR }}
           
+          # Определяем KMOD_PATH один раз
           KMOD_PATH=$(ls feeds/amneziawg/ | grep -E "kmod|linux-kernel-module" | head -1)
+          echo "KMOD_PATH=$KMOD_PATH" >> $GITHUB_ENV
           
           # 1. Build userspace tools
           echo "--- Building amneziawg-tools ---"
@@ -226,11 +234,12 @@ jobs:
           echo "--- Building luci-proto-amneziawg ---"
           make package/feeds/amneziawg/luci-proto-amneziawg/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-luci.log || true
           
-          # Устанавливаем все скомпилированные пакеты для создания IPK
+          # Install all successfully compiled packages
           echo "=== Installing all packages ==="
           make package/install -j$(nproc) V=s || true
           
           mkdir -p /tmp/build-logs; cp /tmp/build-*.log /tmp/build-logs/ 2>/dev/null || true
+
 
       # --- 6. Артефакты и релиз ---
       - name: Create package index and debug results
