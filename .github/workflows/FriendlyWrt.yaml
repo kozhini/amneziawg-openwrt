@@ -1,4 +1,4 @@
-name: Build AmneziaWG for FriendlyWrt (Optimized)
+name: Build AmneziaWG KMOD for FriendlyWrt (Optimized)
 on:
   workflow_dispatch:
     inputs:
@@ -38,7 +38,7 @@ jobs:
       - name: Generate release tag
         id: release_tag
         run: |
-          release_tag="AmneziaWG-FriendlyWrt-${{ inputs.friendlywrt_version }}-$(date +%Y%m%d%H%M)"
+          release_tag="AmneziaWG-KMOD-FriendlyWrt-${{ inputs.friendlywrt_version }}-$(date +%Y%m%d%H%M)"
           echo "release_tag=$release_tag" >> $GITHUB_OUTPUT
       - name: Create draft release
         uses: softprops/action-gh-release@v2
@@ -46,18 +46,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.release_tag.outputs.release_tag }}
-          name: "AmneziaWG for FriendlyWrt ${{ inputs.friendlywrt_version }} - ${{ steps.release_tag.outputs.release_tag }}"
+          name: "AmneziaWG KMOD for FriendlyWrt ${{ inputs.friendlywrt_version }} - ${{ steps.release_tag.outputs.release_tag }}"
           draft: true
           prerelease: false
 
   build_amneziawg:
     needs: prepare_release
     runs-on: ubuntu-22.04
-    # Увеличиваем размер раннера для лучшей производительности
-    # runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Корректная логика для выбора всех CPU, если входной параметр пуст
         target_cpu: ${{ inputs.target_cpu && fromJson(format('["{0}"]', inputs.target_cpu)) || fromJson('["rk3328","rk3399","rk3566","rk3568","rk3576","rk3588"]') }}
       fail-fast: false
     
@@ -80,11 +77,6 @@ jobs:
           fetch-depth: 0
 
       # --- 2. Инициализация окружения ---
-      - name: Setup Go (required for AmneziaWG-Go)
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24.7' # Используем стабильную LTS версию Go
-      
       - name: Initialize build environment
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -95,7 +87,6 @@ jobs:
           
           # Установка инструментария FriendlyWrt (сохраняем)
           wget https://raw.githubusercontent.com/friendlyarm/build-env-on-ubuntu-bionic/master/install.sh
-          # Патчи для пропуска установок, если файлы существуют
           sed -i -e 's/^apt-get -y install openjdk-8-jdk/# apt-get -y install openjdk-8-jdk/g' install.sh
           sed -i -e 's/^\[ -d fa-toolchain \]/# [ -d fa-toolchain ]/g' install.sh
           sed -i -e 's/^(cat fa-toolchain/# (cat fa-toolchain/g' install.sh
@@ -148,31 +139,32 @@ jobs:
           restore-keys: |
             toolchain-${{ inputs.friendlywrt_version }}-${{ matrix.target_cpu }}-
 
+      - name: Download packages (using cache)
+        run: |
+          cd ${{ env.BUILD_DIR }}
+          make download -j$(nproc)
+          find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
+
       # --- 4. Настройка сборки ---
-      - name: Setup AmneziaWG feed and config
+      - name: Setup AmneziaWG feed, update/install feeds
         run: |
           cd ${{ env.BUILD_DIR }}
           
           echo "=== Adding AmneziaWG feed ==="
           echo "src-cpy amneziawg ../../amneziawg-openwrt" >> feeds.conf.default
-          cat feeds.conf.default
+          
+          # Обновление и установка фидов
+          echo "=== Updating feeds ==="
+          ./scripts/feeds update -a || ./scripts/feeds update -a
+          echo "=== Installing feeds ==="
+          ./scripts/feeds install -a
           
           echo "=== Setting ENV variables ==="
           TARGET_IMAGE_DIRNAME=friendlywrt$(echo ${{ inputs.friendlywrt_version }} | awk -F . '{print $1}')
           echo "TARGET_IMAGE_DIRNAME=$TARGET_IMAGE_DIRNAME" >> $GITHUB_ENV
           echo "TARGET_FRIENDLYWRT_CONFIG=rockchip" >> $GITHUB_ENV
 
-      - name: Apply customizations and update/install feeds
-        run: |
-          cd ${{ env.BUILD_DIR }}
-          
-          # Обновление и установка фидов
-          echo "=== Updating feeds ==="
-          ./scripts/feeds update -a || ./scripts/feeds update -a # Повторная попытка
-          echo "=== Installing feeds ==="
-          ./scripts/feeds install -a
-
-      - name: Configure build with AmneziaWG packages
+      - name: Configure build with AmneziaWG KMOD packages
         run: |
           cd ${{ env.BUILD_DIR }}
           
@@ -185,9 +177,8 @@ jobs:
           CONFIG_TARGET_rockchip=y
           CONFIG_TARGET_rockchip_armv8=y
           
-          # Enable AmneziaWG packages (as modules 'm')
+          # Enable AmneziaWG packages (as modules 'm') - NO GO VERSION
           CONFIG_PACKAGE_kmod-amneziawg=m
-          CONFIG_PACKAGE_amneziawg-go=m
           CONFIG_PACKAGE_amneziawg-tools=m
           CONFIG_PACKAGE_luci-proto-amneziawg=m
           
@@ -214,14 +205,8 @@ jobs:
           # Запуск defconfig снова для разрешения зависимостей
           make defconfig
           
-          echo "=== Final .config crypto settings ==="
-          grep -E "(CRYPTO|amneziawg)" .config | head -30
-
-      - name: Download packages (using cache)
-        run: |
-          cd ${{ env.BUILD_DIR }}
-          make download -j$(nproc)
-          find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
+          echo "=== Final .config amneziawg/crypto settings ==="
+          grep -E "(CRYPTO|amneziawg)" .config | head -15
 
       # --- 5. Сборка Toolchain и Kernel ---
       - name: Build Toolchain, Host Tools and Prepare Kernel
@@ -233,11 +218,9 @@ jobs:
           make toolchain/install -j$(nproc) V=s || true
           
           echo "=== Preparing target environment and kernel headers ==="
+          # Эти шаги готовят окружение для внешних kmod
           make target/prepare V=s
           make target/linux/prepare V=s
-          
-          # Проверка готовности ядра
-          find build_dir -name "linux-*" -type d | head -5
 
       - name: Build crypto dependencies (kmod-* packages)
         run: |
@@ -248,7 +231,7 @@ jobs:
           make package/kernel/linux/compile -j$(nproc) V=s
 
       # --- 6. Сборка AmneziaWG ---
-      - name: Build AmneziaWG packages (step by step)
+      - name: Build AmneziaWG packages (kmod, tools, luci)
         run: |
           cd ${{ env.BUILD_DIR }}
           
@@ -265,16 +248,7 @@ jobs:
             tail -30 /tmp/build-tools.log || true
           fi
           
-          # 2. Build Go implementation
-          echo "--- Building amneziawg-go ---"
-          if make package/feeds/amneziawg/amneziawg-go/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-go.log; then
-            BUILD_STATUS[go]="SUCCESS"
-          else
-            BUILD_STATUS[go]="FAILED"
-            tail -30 /tmp/build-go.log || true
-          fi
-          
-          # 3. Build kernel module
+          # 2. Build kernel module
           if [ -n "$KMOD_PATH" ]; then
             echo "--- Building kernel module: $KMOD_PATH ---"
             if make package/feeds/amneziawg/$KMOD_PATH/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-kmod.log; then
@@ -287,7 +261,7 @@ jobs:
             BUILD_STATUS[kmod]="SKIPPED"
           fi
           
-          # 4. Build LuCI interface
+          # 3. Build LuCI interface
           echo "--- Building luci-proto-amneziawg ---"
           if make package/feeds/amneziawg/luci-proto-amneziawg/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-luci.log; then
             BUILD_STATUS[luci]="SUCCESS"
@@ -301,7 +275,7 @@ jobs:
           make package/install -j$(nproc) V=s || true
           
           echo "=== Build Summary ==="
-          for pkg in tools go kmod luci; do
+          for pkg in tools kmod luci; do
             echo "$pkg: ${BUILD_STATUS[$pkg]}"
           done
           
@@ -313,12 +287,10 @@ jobs:
           cd ${{ env.BUILD_DIR }}
           
           echo "=== Creating package index ==="
-          # Создание индекса, игнорируя ошибки usign, если нет ключей
           make package/index V=s 2>&1 | grep -v "usign" || true
           
           echo "=== Comprehensive package search ==="
           find bin -name "*amneziawg*.ipk" -type f -ls 2>/dev/null || echo "No AmneziaWG IPK files found."
-          find bin -name "kmod-crypto*.ipk" -type f -ls 2>/dev/null || echo "No Crypto IPK files found."
 
       # --- 7. Артефакты и релиз ---
       - name: Prepare artifacts - IPK files only
@@ -343,12 +315,8 @@ jobs:
           IPK_COUNT=$(find "${ARTIFACT_DIR}" -name "*.ipk" -type f 2>/dev/null | wc -l)
           echo "=== Total AmneziaWG/Crypto IPK files found: $IPK_COUNT ==="
           
-          # Копирование логов и создание отчета (оставлено для диагностики)
+          # Копирование логов и создание отчета (сохранено для диагностики)
           cp /tmp/build-logs/* "${ARTIFACT_DIR}/" 2>/dev/null || true
-          
-          # Создание build-report.txt
-          # (содержимое build-report.txt и INSTALL.txt опущено для краткости, но должно быть сохранено)
-          # ...
           
           echo "=== Final artifact directory ==="
           ls -lh "${ARTIFACT_DIR}/" || true
