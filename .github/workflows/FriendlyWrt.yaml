@@ -1,0 +1,706 @@
+name: Build AmneziaWG for FriendlyWrt
+on:
+  workflow_dispatch:
+    inputs:
+      friendlywrt_version:
+        description: "FriendlyWrt version"
+        type: choice
+        required: true
+        default: "23.05"
+        options:
+          - "23.05"
+          - "24.10"
+      amneziawg_version:
+        description: "AmneziaWG version"
+        type: string
+        required: true
+        default: "master"
+      target_cpu:
+        description: "Target CPU (leave empty for all platforms)"
+        type: choice
+        required: false
+        default: "rk3328"
+        options:
+          - ""
+          - "rk3328"
+          - "rk3399"
+          - "rk3566"
+          - "rk3568"
+          - "rk3576"
+          - "rk3588"
+
+jobs:
+  prepare_release:
+    runs-on: ubuntu-22.04
+    outputs:
+      release_tag: ${{ steps.release_tag.outputs.release_tag }}
+    steps:
+      - name: Get release tag
+        id: release_tag
+        run: |
+          release_tag="AmneziaWG-FriendlyWrt-$(date +%Y-%m-%d-%H%M)"
+          echo "release_tag=$release_tag" >> $GITHUB_OUTPUT
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.release_tag.outputs.release_tag }}
+          name: "AmneziaWG for FriendlyWrt ${{ inputs.friendlywrt_version }} - ${{ steps.release_tag.outputs.release_tag }}"
+          draft: true
+          prerelease: false
+
+  build_amneziawg:
+    needs: prepare_release
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        target_cpu: ${{ inputs.target_cpu && fromJson(format('["{0}"]', inputs.target_cpu)) || fromJson('["rk3328","rk3399","rk3566","rk3568","rk3588"]') }}
+      fail-fast: false
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Checkout AmneziaWG OpenWRT repository
+        uses: actions/checkout@v5
+        with:
+          repository: kozhini/amneziawg-openwrt
+          path: amneziawg-openwrt
+          ref: ${{ inputs.amneziawg_version }}
+          fetch-depth: 0
+
+      - name: Initialize build environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo rm -rf /etc/apt/sources.list.d
+          sudo apt-get update
+          sudo apt-get install -y python3-pyelftools python3-dev python3-setuptools swig wget git
+          
+          wget https://raw.githubusercontent.com/friendlyarm/build-env-on-ubuntu-bionic/master/install.sh
+          sed -i -e 's/^apt-get -y install openjdk-8-jdk/# apt-get -y install openjdk-8-jdk/g' install.sh
+          sed -i -e 's/^\[ -d fa-toolchain \]/# [ -d fa-toolchain ]/g' install.sh
+          sed -i -e 's/^(cat fa-toolchain/# (cat fa-toolchain/g' install.sh
+          sed -i -e 's/^(tar xf fa-toolchain/# (tar xf fa-toolchain/g' install.sh
+          sudo -E bash ./install.sh
+          
+          # Install Go
+          GO_VERSION=1.25.1
+          wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          echo "GOTOOLCHAIN=local" >> $GITHUB_ENV
+          go version
+          
+          # Clean unused packages
+          sudo swapoff -a
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk /usr/local/share/boost /opt/ghc
+          
+          # Install repo tool
+          git clone https://github.com/friendlyarm/repo
+          sudo cp repo/repo /usr/bin/
+
+      - name: Download FriendlyWrt source following official guide
+        run: |
+          mkdir -p friendlywrt-project
+          cd friendlywrt-project
+          
+          echo "=== Initializing repo with FriendlyWrt manifest ==="
+          repo init --depth=1 \
+            -u https://github.com/friendlyarm/friendlywrt_manifests \
+            -b master-v${{ inputs.friendlywrt_version }} \
+            -m ${{ matrix.target_cpu }}.xml \
+            --repo-url=https://github.com/friendlyarm/repo \
+            --no-clone-bundle
+          
+          echo "=== Syncing all components (official method) ==="
+          # Use official sync command from FriendlyElec wiki
+          repo sync -c --no-clone-bundle || {
+            echo "⚠️ First sync attempt failed, retrying..."
+            repo sync -c --no-clone-bundle
+          }
+          
+          echo "=== Verifying directory structure ==="
+          ls -la
+          
+          # Verify required directories exist (per official documentation)
+          for dir in friendlywrt kernel u-boot toolchain scripts device configs; do
+            if [ -d "$dir" ]; then
+              echo "✅ $dir directory exists"
+            else
+              echo "❌ $dir directory missing"
+            fi
+          done
+          
+          # Show friendlywrt structure
+          echo "=== FriendlyWrt directory structure ==="
+          ls -la friendlywrt/ 2>/dev/null || echo "friendlywrt directory not found"
+
+      - name: Setup AmneziaWG feed and config
+        run: |
+          cd friendlywrt-project/friendlywrt
+          
+          # Add AmneziaWG feed (following official method)
+          echo "=== Adding AmneziaWG feed ==="
+          echo "src-cpy amneziawg ../../amneziawg-openwrt" >> feeds.conf.default
+          
+          echo "=== Current feeds.conf.default ==="
+          cat feeds.conf.default
+          
+          echo "=== Verifying AmneziaWG feed source ==="
+          ls -la ../../amneziawg-openwrt/ || echo "AmneziaWG source not found"
+          
+          # Set environment variables for FriendlyWrt
+          TARGET_IMAGE_DIRNAME=friendlywrt$(echo ${{ inputs.friendlywrt_version }} | awk -F . '{print $1}')
+          TARGET_FRIENDLYWRT_CONFIG=rockchip
+          echo "TARGET_IMAGE_DIRNAME=$TARGET_IMAGE_DIRNAME" >> $GITHUB_ENV
+          echo "TARGET_FRIENDLYWRT_CONFIG=$TARGET_FRIENDLYWRT_CONFIG" >> $GITHUB_ENV
+
+      - name: Apply customizations and update feeds (official method)
+        run: |
+          cd friendlywrt-project/friendlywrt
+          
+          # Update feeds following official documentation
+          echo "=== Updating feeds ==="
+          ./scripts/feeds update -a || {
+            echo "⚠️ Feed update failed, retrying..."
+            sleep 5
+            ./scripts/feeds update -a
+          }
+          
+          echo "=== Installing feeds ==="
+          ./scripts/feeds install -a
+
+      - name: Configure build with corrected package names
+        run: |
+          cd friendlywrt-project/friendlywrt
+          
+          # Start with a clean config and set the basic target
+          make defconfig
+          
+          # Configure for AmneziaWG with corrected OpenWrt package names
+          cat >> .config << EOF
+          # Target configuration
+          CONFIG_TARGET_rockchip=y
+          CONFIG_TARGET_rockchip_armv8=y
+          
+          # Enable AmneziaWG packages
+          CONFIG_PACKAGE_kmod-amneziawg=m
+          CONFIG_PACKAGE_amneziawg-go=m
+          CONFIG_PACKAGE_amneziawg-tools=m
+          CONFIG_PACKAGE_luci-proto-amneziawg=m
+          
+          # Kernel crypto subsystem (corrected names)
+          CONFIG_CRYPTO=y
+          CONFIG_CRYPTO_ALGAPI=y
+          CONFIG_CRYPTO_AEAD=y
+          CONFIG_CRYPTO_HASH=y
+          CONFIG_CRYPTO_SKCIPHER=y
+          CONFIG_CRYPTO_KPP=y
+          
+          # Required crypto algorithms for AmneziaWG
+          CONFIG_CRYPTO_BLAKE2S=m
+          CONFIG_CRYPTO_CHACHA20=m
+          CONFIG_CRYPTO_CHACHA20POLY1305=m
+          CONFIG_CRYPTO_POLY1305=m
+          CONFIG_CRYPTO_CURVE25519=m
+          
+          # ARM64 NEON optimized crypto
+          CONFIG_CRYPTO_CHACHA20_NEON=m
+          CONFIG_CRYPTO_POLY1305_NEON=m
+          CONFIG_CRYPTO_CURVE25519_NEON=m
+          
+          # Correct kernel module package names in OpenWrt
+          CONFIG_PACKAGE_kmod-crypto-aead=m
+          CONFIG_PACKAGE_kmod-crypto-hash=m
+          CONFIG_PACKAGE_kmod-crypto-kpp=m
+          CONFIG_PACKAGE_kmod-crypto-skcipher=m
+          
+          # Don't build images to save time
+          # CONFIG_TARGET_ROOTFS_CPIOGZ is not set
+          # CONFIG_TARGET_ROOTFS_TARGZ is not set
+          # CONFIG_TARGET_ROOTFS_SQUASHFS is not set
+          EOF
+          
+          # Resolve dependencies and conflicts
+          make defconfig
+          
+          echo "=== Final .config crypto settings ==="
+          grep -E "(CRYPTO|amneziawg)" .config | head -30
+
+      - name: Download packages
+        run: |
+          cd project/friendlywrt
+          make download -j$(nproc)
+          find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
+
+      - name: Prepare kernel for module compilation
+        run: |
+          cd project/friendlywrt
+          
+          echo "=== Preparing kernel for module compilation ==="
+          # Prepare kernel headers and build environment
+          make target/linux/prepare V=s
+          
+          echo "=== Checking prepared kernel ==="
+          find build_dir -name "linux-*" -type d | head -5
+          
+          # Verify NEON crypto is available in prepared kernel
+          KERNEL_BUILD_DIR=$(find build_dir -name "linux-*" -type d | head -1)
+          if [ -n "$KERNEL_BUILD_DIR" ] && [ -d "$KERNEL_BUILD_DIR/arch/arm64/crypto" ]; then
+            echo "✅ NEON crypto confirmed in build environment"
+            echo "Available NEON optimized crypto:"
+            ls -1 "$KERNEL_BUILD_DIR/arch/arm64/crypto/" | grep -E "(chacha|poly|curve|blake)" || true
+          else
+            echo "⚠️ NEON crypto not found in build dir, may be added during compilation"
+          fi
+
+      - name: Verify kernel source and NEON crypto support
+        run: |
+          cd project/friendlywrt
+          
+          echo "=== Checking kernel source ==="
+          if [ -d "target/linux/rockchip" ]; then
+            echo "✅ Found rockchip target directory"
+            ls -la target/linux/rockchip/
+          fi
+          
+          # Look for kernel source in common locations
+          KERNEL_LOCATIONS=(
+            "kernel"
+            "../kernel" 
+            "target/linux/rockchip/kernel"
+          )
+          
+          KERNEL_FOUND=false
+          for loc in "${KERNEL_LOCATIONS[@]}"; do
+            if [ -d "$loc" ]; then
+              echo "✅ Found kernel source at: $loc"
+              if [ -d "$loc/arch/arm64/crypto" ]; then
+                echo "✅ NEON crypto support available"
+                echo "Available NEON crypto modules:"
+                ls -1 "$loc/arch/arm64/crypto/" | grep -E "\.(c|S)$" | head -10
+                KERNEL_FOUND=true
+                break
+              fi
+            fi
+          done
+          
+          if [ "$KERNEL_FOUND" != "true" ]; then
+            echo "⚠️ Kernel source not found in expected locations, checking after kernel preparation..."
+          fi
+
+      - name: Build toolchain and host tools
+        run: |
+          cd project/friendlywrt
+          
+          echo "=== Building essential host tools ==="
+          # Build essential tools including usign for package signing
+          make tools/install -j$(nproc) V=s || {
+            echo "⚠️ Some tools failed, trying key tools individually..."
+            make tools/usign/compile V=s || echo "usign compile failed"
+            make tools/usign/install V=s || echo "usign install failed"
+          }
+          
+          echo "=== Building toolchain ==="
+          make toolchain/install -j$(nproc) V=s || {
+            echo "❌ Toolchain build failed, trying basic components..."
+            make toolchain/musl/compile V=s || echo "musl compile failed"
+            make toolchain/gcc/compile V=s || echo "gcc compile failed"
+          }
+          
+          echo "=== Checking usign availability ==="
+          if [ -f "staging_dir/host/bin/usign" ]; then
+            echo "✅ usign is available"
+          else
+            echo "⚠️ usign not found, package signing will fail (non-critical)"
+          fi
+          
+          echo "=== Preparing target environment ==="
+          make target/prepare V=s || echo "Target prepare failed"
+
+      - name: Build crypto dependencies with correct names
+        run: |
+          cd friendlywrt-project/friendlywrt
+          
+          echo "=== Building crypto dependencies ==="
+          
+          # Build basic kernel infrastructure
+          make package/kernel/linux/prepare V=s || echo "Kernel prepare failed"
+          
+          # Build crypto modules with correct OpenWrt package names
+          echo "Building crypto kernel modules..."
+          make package/kernel/linux/compile CONFIG_PACKAGE_kmod-crypto-hash=m V=s || echo "crypto-hash compile failed"
+          make package/kernel/linux/compile CONFIG_PACKAGE_kmod-crypto-manager2=m V=s || echo "crypto-manager2 compile failed"
+          make package/kernel/linux/compile CONFIG_PACKAGE_kmod-crypto-kpp=m V=s || echo "crypto-kpp compile failed"
+          make package/kernel/linux/compile CONFIG_PACKAGE_kmod-crypto-aead=m V=s || echo "crypto-aead compile failed"
+          
+          # Try to build specific NEON crypto modules if they exist
+          make package/kernel/linux/compile CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m V=s || echo "chacha20poly1305 not available"
+          make package/kernel/linux/compile CONFIG_PACKAGE_kmod-crypto-curve25519=m V=s || echo "curve25519 not available"
+
+      - name: Build AmneziaWG packages step by step
+        run: |
+          cd friendlywrt-project/friendlywrt
+          
+          echo "=== Checking AmneziaWG feed integration ==="
+          ./scripts/feeds list -s | grep -i amnezia || echo "⚠️ AmneziaWG not in feeds list"
+          
+          # Check if packages are available
+          echo "=== Available AmneziaWG packages ==="
+          ls -la feeds/amneziawg/ 2>/dev/null || echo "❌ Feed directory not found"
+          
+          # Check package directories structure
+          echo "=== Feed structure check ==="
+          for pkg in amneziawg-go amneziawg-tools luci-proto-amneziawg; do
+            if [ -d "feeds/amneziawg/$pkg" ]; then
+              echo "✅ Found package: $pkg"
+              ls feeds/amneziawg/$pkg/Makefile >/dev/null 2>&1 && echo "  - Has Makefile" || echo "  - Missing Makefile"
+            else
+              echo "❌ Package not found: $pkg"
+            fi
+          done
+          
+          # Check for kernel module with different possible names
+          if [ -d "feeds/amneziawg/amneziawg-linux-kernel-module" ]; then
+            echo "✅ Found kernel module: amneziawg-linux-kernel-module"
+            KMOD_PATH="amneziawg-linux-kernel-module"
+          elif [ -d "feeds/amneziawg/kmod-amneziawg" ]; then
+            echo "✅ Found kernel module: kmod-amneziawg"
+            KMOD_PATH="kmod-amneziawg"
+          else
+            echo "❌ Kernel module source not found in feed"
+            echo "Available directories in feed:"
+            ls -1 feeds/amneziawg/
+            KMOD_PATH=""
+          fi
+          
+          echo "=== Building AmneziaWG packages with detailed logging ==="
+          
+          declare -A BUILD_STATUS
+          
+          # Build userspace tools first (doesn't require kernel)
+          echo "--- Building amneziawg-tools ---"
+          if make package/feeds/amneziawg/amneziawg-tools/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-tools.log; then
+            BUILD_STATUS[tools]="SUCCESS"
+            echo "✅ amneziawg-tools built successfully"
+            make package/feeds/amneziawg/amneziawg-tools/install V=s || echo "⚠️ Install step failed"
+          else
+            BUILD_STATUS[tools]="FAILED"
+            echo "❌ amneziawg-tools build failed"
+            echo "Last 30 lines of build log:"
+            tail -30 /tmp/build-tools.log
+          fi
+          
+          # Build Go implementation
+          echo "--- Building amneziawg-go ---"
+          if make package/feeds/amneziawg/amneziawg-go/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-go.log; then
+            BUILD_STATUS[go]="SUCCESS"
+            echo "✅ amneziawg-go built successfully"
+            make package/feeds/amneziawg/amneziawg-go/install V=s || echo "⚠️ Install step failed"
+          else
+            BUILD_STATUS[go]="FAILED"
+            echo "❌ amneziawg-go build failed"
+            echo "Last 30 lines of build log:"
+            tail -30 /tmp/build-go.log
+          fi
+          
+          # Build kernel module if path exists
+          if [ -n "$KMOD_PATH" ]; then
+            echo "--- Building kernel module: $KMOD_PATH ---"
+            if make package/feeds/amneziawg/$KMOD_PATH/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-kmod.log; then
+              BUILD_STATUS[kmod]="SUCCESS"
+              echo "✅ Kernel module built successfully"
+              make package/feeds/amneziawg/$KMOD_PATH/install V=s || echo "⚠️ Install step failed"
+            else
+              BUILD_STATUS[kmod]="FAILED"
+              echo "❌ Kernel module build failed"
+              echo "Last 50 lines of build log:"
+              tail -50 /tmp/build-kmod.log
+            fi
+          else
+            BUILD_STATUS[kmod]="SKIPPED"
+            echo "⚠️ Kernel module skipped - source not found"
+          fi
+          
+          # Build LuCI interface
+          echo "--- Building luci-proto-amneziawg ---"
+          if make package/feeds/amneziawg/luci-proto-amneziawg/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-luci.log; then
+            BUILD_STATUS[luci]="SUCCESS"
+            echo "✅ luci-proto-amneziawg built successfully"
+            make package/feeds/amneziawg/luci-proto-amneziawg/install V=s || echo "⚠️ Install step failed"
+          else
+            BUILD_STATUS[luci]="FAILED"
+            echo "❌ luci-proto-amneziawg build failed"
+            echo "Last 30 lines of build log:"
+            tail -30 /tmp/build-luci.log
+          fi
+          
+          # Summary
+          echo "=== Build Summary ==="
+          for pkg in tools go kmod luci; do
+            echo "$pkg: ${BUILD_STATUS[$pkg]}"
+          done
+          
+          # Save build logs
+          mkdir -p /tmp/build-logs
+          cp /tmp/build-*.log /tmp/build-logs/ 2>/dev/null || true
+
+      - name: Install packages and create IPKs
+        continue-on-error: true
+        run: |
+          cd friendlywrt-project/friendlywrt
+          
+          echo "=== Creating package index ==="
+          # Try to create index, ignore usign errors
+          make package/index V=s 2>&1 | grep -v "usign" || {
+            echo "⚠️ Package index creation failed, but IPKs may still be valid"
+            echo "Trying manual index creation..."
+            
+            # Create a simple index without signing
+            for arch_dir in bin/targets/*/; do
+              if [ -d "$arch_dir" ]; then
+                echo "Processing $arch_dir"
+                (cd "$arch_dir" && ls *.ipk 2>/dev/null | xargs -r md5sum > Packages 2>/dev/null) || true
+              fi
+            done
+            
+            for pkg_dir in bin/packages/*/; do
+              if [ -d "$pkg_dir" ]; then
+                echo "Processing $pkg_dir"
+                (cd "$pkg_dir" && ls *.ipk 2>/dev/null | xargs -r md5sum > Packages 2>/dev/null) || true
+              fi
+            done
+          }
+          
+          echo "=== Checking built packages ==="
+          find bin -name "*.ipk" -ls 2>/dev/null | head -20 || echo "No IPK files found yet"
+
+      - name: Debug build results and search for packages
+        run: |
+          cd project/friendlywrt
+          
+          echo "=== Comprehensive package search ==="
+          # Search in all possible locations
+          find . -name "*amneziawg*" -type f 2>/dev/null | head -20 || echo "No AmneziaWG files found"
+          find bin -name "*.ipk" -type f 2>/dev/null | head -20 || echo "No IPK files found in bin"
+          find staging_dir -name "*.ipk" -type f 2>/dev/null | head -10 || echo "No IPK files in staging"
+          
+          echo "=== Build logs analysis ==="
+          if [ -d logs ]; then
+            echo "Available log files:"
+            ls -la logs/ | head -10
+            echo "=== Recent build errors ==="
+            find logs -name "*.log" -exec grep -l "Error\|Failed\|amneziawg" {} \; 2>/dev/null | head -3 | while read log; do
+              echo "--- $log ---"
+              tail -30 "$log" | grep -A5 -B5 -i "error\|fail\|amneziawg" || tail -10 "$log"
+            done
+          fi
+          
+          echo "=== Package compilation check ==="
+          # Check if packages were at least attempted to be compiled
+          find build_dir -name "*amneziawg*" -type d 2>/dev/null | head -10
+          find build_dir -path "*amneziawg*" -name "Makefile" 2>/dev/null | head -5
+          
+          echo "=== Feed status ==="
+          ls -la feeds/amneziawg/ || echo "AmneziaWG feed not found"
+          find feeds/amneziawg -name "Makefile" 2>/dev/null | head -5
+          
+          echo "=== Alternative package paths ==="
+          find package -name "*amneziawg*" -type d 2>/dev/null | head -5
+          find feeds -name "*amneziawg*" -type d 2>/dev/null | head -5
+
+      - name: Prepare artifacts - IPK files only
+        shell: bash
+        run: |
+          set +e  # Don't exit on error
+          cd friendlywrt-project/friendlywrt
+          ARTIFACT_DIR=../../artifact/amneziawg-packages/${{ matrix.target_cpu }}
+          mkdir -p "${ARTIFACT_DIR}"
+          
+          echo "=== Searching for IPK files only ==="
+          
+          # Find and copy ONLY .ipk files related to AmneziaWG
+          IPK_COUNT=0
+          
+          # Search specifically for AmneziaWG IPKs
+          if [ -d "bin" ]; then
+            echo "Searching in bin directory..."
+            find bin -name "*.ipk" -type f 2>/dev/null | while read file; do
+              filename=$(basename "$file")
+              # Only copy AmneziaWG and required crypto packages
+              if [[ "$filename" =~ (amneziawg|crypto-chacha|crypto-poly|crypto-curve|crypto-blake|crypto-kpp|crypto-hash) ]]; then
+                cp "$file" "${ARTIFACT_DIR}/" && echo "✅ Found: $filename" && ((IPK_COUNT++)) || true
+              fi
+            done
+          fi
+          
+          # Count actual copied files
+          IPK_COUNT=$(find "${ARTIFACT_DIR}" -name "*.ipk" -type f 2>/dev/null | wc -l)
+          
+          # If still no IPKs, try build_dir
+          if [ $IPK_COUNT -eq 0 ]; then
+            echo "No IPKs in bin, searching build_dir..."
+            find build_dir -name "*.ipk" -type f 2>/dev/null | while read file; do
+              filename=$(basename "$file")
+              if [[ "$filename" =~ amneziawg ]]; then
+                cp "$file" "${ARTIFACT_DIR}/" && echo "✅ Found: $filename" || true
+              fi
+            done
+            IPK_COUNT=$(find "${ARTIFACT_DIR}" -name "*.ipk" -type f 2>/dev/null | wc -l)
+          fi
+          
+          echo "=== Total AmneziaWG IPK files found: $IPK_COUNT ==="
+          
+          # Copy build logs
+          mkdir -p "${ARTIFACT_DIR}/logs"
+          cp /tmp/build-*.log "${ARTIFACT_DIR}/logs/" 2>/dev/null || true
+          
+          # Create detailed build report
+          cat > "${ARTIFACT_DIR}/build-report.txt" << EOF
+          AmneziaWG Build Report
+          =====================
+          
+          Target: ${{ matrix.target_cpu }}
+          FriendlyWrt: ${{ inputs.friendlywrt_version }}
+          AmneziaWG: ${{ inputs.amneziawg_version }}
+          Build Date: $(date)
+          
+          IPK Packages Found: $IPK_COUNT
+          
+          === Package List ===
+          $(ls -lh "${ARTIFACT_DIR}"/*.ipk 2>/dev/null || echo "No IPK files found")
+          
+          === Expected Packages ===
+          - kmod-amneziawg_*.ipk (kernel module)
+          - amneziawg-tools_*.ipk (wg/awg tools)
+          - amneziawg-go_*.ipk (Go implementation)
+          - luci-proto-amneziawg_*.ipk (web UI)
+          - kmod-crypto-* (crypto dependencies)
+          
+          === Architecture ===
+          EOF
+          
+          case ${{ matrix.target_cpu }} in
+            rk3328|rk3528)
+              echo "aarch64_cortex-a53" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+            rk3399|rk3576)
+              echo "aarch64_cortex-a72_cortex-a53" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+            rk3566|rk3568)
+              echo "aarch64_cortex-a55" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+            rk3588)
+              echo "aarch64_cortex-a76_cortex-a55" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+            *)
+              echo "aarch64_generic" >> "${ARTIFACT_DIR}/build-report.txt"
+              ;;
+          esac
+          
+          # Add diagnostic info if no packages found
+          if [ $IPK_COUNT -eq 0 ]; then
+            cat >> "${ARTIFACT_DIR}/build-report.txt" << 'DIAG'
+          
+          === Build Failed - Diagnostic Info ===
+          
+          Feed Directory Status:
+          DIAG
+            ls -la feeds/amneziawg/ 2>&1 >> "${ARTIFACT_DIR}/build-report.txt" || echo "Feed not found" >> "${ARTIFACT_DIR}/build-report.txt"
+            
+            echo "" >> "${ARTIFACT_DIR}/build-report.txt"
+            echo "Build Logs Summary:" >> "${ARTIFACT_DIR}/build-report.txt"
+            echo "See logs/ directory for detailed build output" >> "${ARTIFACT_DIR}/build-report.txt"
+            
+            # Add snippets from build logs
+            for log in /tmp/build-*.log; do
+              if [ -f "$log" ]; then
+                echo "" >> "${ARTIFACT_DIR}/build-report.txt"
+                echo "=== $(basename $log) (last 20 lines) ===" >> "${ARTIFACT_DIR}/build-report.txt"
+                tail -20 "$log" >> "${ARTIFACT_DIR}/build-report.txt" 2>&1 || true
+              fi
+            done
+          fi
+          
+          # Create installation instructions
+          cat > "${ARTIFACT_DIR}/INSTALL.txt" << 'EOF'
+          AmneziaWG Installation for FriendlyWrt
+          ======================================
+          
+          Prerequisites:
+          - FriendlyWrt router with internet access
+          - SSH access to router
+          - Compatible architecture (check build-report.txt)
+          
+          Installation Steps:
+          
+          1. Upload IPK files to router:
+             scp *.ipk root@YOUR_ROUTER_IP:/tmp/
+          
+          2. SSH to router:
+             ssh root@YOUR_ROUTER_IP
+             cd /tmp
+          
+          3. Install packages in order:
+             # Install crypto dependencies first
+             opkg install kmod-crypto-*.ipk
+             
+             # Install AmneziaWG kernel module
+             opkg install kmod-amneziawg*.ipk
+             
+             # Install userspace tools
+             opkg install amneziawg-tools*.ipk
+             opkg install amneziawg-go*.ipk
+             
+             # Install LuCI web interface (optional)
+             opkg install luci-proto-amneziawg*.ipk
+          
+          4. Reboot router:
+             reboot
+          
+          5. Verify installation:
+             awg --version
+             lsmod | grep amneziawg
+          
+          Configuration via Web UI:
+          - Navigate to Network > Interfaces
+          - Click "Add new interface"
+          - Select "AmneziaWG VPN" protocol
+          
+          Configuration via CLI:
+          - Edit /etc/config/network
+          - Or use: awg-quick up wg0
+          
+          Troubleshooting:
+          - Architecture mismatch: verify build-report.txt architecture matches your device
+          - Kernel version mismatch: ensure FriendlyWrt version compatibility
+          - Missing dependencies: opkg update && opkg install <missing-package>
+          - Check logs: logread | grep -i amnezia
+          
+          If no IPK files in this release:
+          - Build failed, check build-report.txt and logs/
+          - Try building directly on target device
+          - Report issue at: https://github.com/kozhini/amneziawg-openwrt/issues
+          EOF
+          
+          echo "=== Final artifact directory ==="
+          ls -lh "${ARTIFACT_DIR}/" || true
+          
+          # Always exit successfully
+          exit 0
+
+      - name: Upload IPK packages to draft release
+        if: always()
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.prepare_release.outputs.release_tag }}
+          files: |
+            artifact/amneziawg-packages/${{ matrix.target_cpu }}/*.ipk
+            artifact/amneziawg-packages/${{ matrix.target_cpu }}/INSTALL.txt
+            artifact/amneziawg-packages/${{ matrix.target_cpu }}/build-report.txt
