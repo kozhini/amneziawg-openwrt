@@ -58,7 +58,7 @@ jobs:
     needs: prepare_release
     runs-on: self-hosted
     
-    # 👈 FIX: Устанавливаем BASH как shell по умолчанию для всех Linux-команд
+    # FIX: Устанавливаем BASH как shell по умолчанию для всех Linux-команд
     defaults:
       run:
         shell: bash
@@ -160,7 +160,7 @@ jobs:
           
           make defconfig
           
-          # Начинаем HEREDOC
+          # Начинаем HEREDOC. Все строки ВНУТРИ должны иметь одинаковый отступ.
           cat >> .config << EOF
 CONFIG_TARGET_rockchip=y
 CONFIG_TARGET_rockchip_armv8=y
@@ -184,6 +184,9 @@ EOF
           make defconfig
 
       - name: Download packages
+        run: | # 👈 FIX: Добавлен отсутствующий 'run: |'
+          cd ${{ env.BUILD_DIR }}
+          make download -j1 
 
       # --- 5. Сборка Toolchain и Kernel ---
       
