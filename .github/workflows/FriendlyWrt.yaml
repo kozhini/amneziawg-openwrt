@@ -122,8 +122,27 @@ jobs:
       - name: Setup AmneziaWG feed, update/install feeds
         run: |
           cd ${{ env.BUILD_DIR }}
+          
+          echo "=== Adding AmneziaWG feed ==="
           echo "src-cpy amneziawg ../../amneziawg-openwrt" >> feeds.conf.default
-          ./scripts/feeds update -a || ./scripts/feeds update -a
+          
+          # 👈 ИСПРАВЛЕНИЕ: Добавление логики повторных попыток для обновления фидов
+          ATTEMPTS=3
+          for i in $(seq 1 $ATTEMPTS); do
+            echo "=== Attempt $i to update feeds... ==="
+            if ./scripts/feeds update -a; then
+              echo "✅ Feeds updated successfully."
+              break
+            elif [ $i -eq $ATTEMPTS ]; then
+              echo "❌ All $ATTEMPTS attempts to update feeds failed."
+              exit 1
+            else
+              echo "Waiting 10 seconds before retrying..."
+              sleep 10
+            fi
+          done
+          
+          echo "=== Installing feeds ==="
           ./scripts/feeds install -a
           
           TARGET_IMAGE_DIRNAME=friendlywrt$(echo ${{ inputs.friendlywrt_version }} | awk -F . '{print $1}')
