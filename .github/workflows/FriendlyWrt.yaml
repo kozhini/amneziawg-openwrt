@@ -160,7 +160,7 @@ jobs:
           
           make defconfig
           
-          # 👈 ПРОВЕРКА: Весь блок 'EOF' должен быть корректно выровнен
+          # Начинаем HEREDOC
           cat >> .config << EOF
 CONFIG_TARGET_rockchip=y
 CONFIG_TARGET_rockchip_armv8=y
@@ -184,9 +184,6 @@ EOF
           make defconfig
 
       - name: Download packages
-        run: |
-          cd ${{ env.BUILD_DIR }}
-          make download -j1 
 
       # --- 5. Сборка Toolchain и Kernel ---
       
