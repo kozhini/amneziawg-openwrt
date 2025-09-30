@@ -1,4 +1,4 @@
-name: Build AmneziaWG KMOD for FriendlyWrt (Final Optimized)
+name: Build AmneziaWG KMOD for FriendlyWrt (Self-Hosted Windows)
 on:
   workflow_dispatch:
     inputs:
@@ -6,7 +6,7 @@ on:
         description: "FriendlyWrt version"
         type: choice
         required: true
-        default: "24.10"
+        default: "23.05"
         options:
           - "23.05"
           - "24.10"
@@ -31,15 +31,20 @@ on:
 
 jobs:
   prepare_release:
-    runs-on: self-hosted
+    runs-on: self-hosted # 👈 ИСПОЛЬЗУЕМ SELF-HOSTED
     outputs:
       release_tag: ${{ steps.release_tag.outputs.release_tag }}
+    
     steps:
-      - name: Generate release tag
+      - name: Generate release tag (PowerShell Syntax)
         id: release_tag
+        # 👈 FIX 1: Используем PowerShell для Windows, чтобы получить дату в правильном формате
+        shell: powershell
         run: |
-          release_tag="AmneziaWG-KMOD-FriendlyWrt-${{ inputs.friendlywrt_version }}-$(date +%Y%m%d%H%M)"
-          echo "release_tag=$release_tag" >> $GITHUB_OUTPUT
+          $timestamp = Get-Date -Format yyyyMMddHHmm
+          $release_tag = "AmneziaWG-KMOD-FriendlyWrt-${{ inputs.friendlywrt_version }}-$timestamp"
+          echo "release_tag=$release_tag" >> $env:GITHUB_OUTPUT
+          
       - name: Create draft release
         uses: softprops/action-gh-release@v2
         env:
@@ -52,7 +57,13 @@ jobs:
 
   build_amneziawg:
     needs: prepare_release
-    runs-on: self-hosted
+    runs-on: self-hosted # 👈 ИСПОЛЬЗУЕМ SELF-HOSTED
+    
+    # 👈 FIX 2: Устанавливаем BASH как shell по умолчанию для всех Linux-команд
+    defaults:
+      run:
+        shell: bash
+        
     strategy:
       matrix:
         target_cpu: ${{ inputs.target_cpu && fromJson(format('["{0}"]', inputs.target_cpu)) || fromJson('["rk3328","rk3399","rk3566","rk3568","rk3576","rk3588"]') }}
@@ -60,11 +71,12 @@ jobs:
     
     env:
       BUILD_DIR: friendlywrt-project/friendlywrt
-      TERM: xterm # 👈 FIX: Установка TERM для избежания ошибки "Error opening terminal: unknown."
+      TERM: xterm
 
     steps:
-      # --- 1. Подготовка репозиториев и инициализация ---
-      - name: Checkout main repository and AmneziaWG
+      # --- 1. Подготовка репозиториев ---
+      # Примечание: uses: actions/checkout@v5 работает на Windows
+      - name: Checkout main repository
         uses: actions/checkout@v5
         with:
           submodules: true
@@ -77,56 +89,62 @@ jobs:
           ref: ${{ inputs.amneziawg_version }}
           fetch-depth: 0
 
-      - name: Initialize build environment
-        env:
-          DEBIAN_FRONTEND: noninteractive
+      # --- 2. Инициализация окружения ---
+      # Примечание: В self-hosted runner на Windows нужно убедиться,
+      # что эти зависимости (или их эквиваленты) установлены заранее.
+      - name: Initialize build environment (Ensure Linux Tools are Available)
         run: |
-          # Установка базовых зависимостей и инструментария FriendlyWrt
-          sudo apt-get update
-          sudo apt-get install -y python3-pyelftools python3-dev python3-setuptools swig wget git unzip libncurses5-dev libncursesw5-dev
+          # В Windows self-hosted runner этот шаг служит для проверки,
+          # что Bash, Git и другие инструменты доступны.
+          if command -v bash >/dev/null 2>&1; then
+            echo "Bash is available."
+          else
+            echo "Error: Bash (Git Bash) is required but not found. Please install it."
+            exit 1
+          fi
+
+          # Установка инструментария FriendlyWrt
           wget https://raw.githubusercontent.com/friendlyarm/build-env-on-ubuntu-bionic/master/install.sh
+          # Sed-команды работают в Bash
           sed -i -e 's/^apt-get -y install openjdk-8-jdk/# apt-get -y install openjdk-8-jdk/g' install.sh
           sed -i -e 's/^\[ -d fa-toolchain \]/# [ -d fa-toolchain ]/g' install.sh
           sed -i -e 's/^(cat fa-toolchain/# (cat fa-toolchain/g' install.sh
           sed -i -e 's/^(tar xf fa-toolchain/# (tar xf fa-toolchain/g' install.sh
-          sudo -E bash ./install.sh
+          # Примечание: bash ./install.sh может потребовать sudo/root прав,
+          # которые могут быть недоступны в Windows Runner.
+          bash ./install.sh
+          
           git clone https://github.com/friendlyarm/repo
-          sudo cp repo/repo /usr/bin/
-          sudo swapoff -a; sudo apt clean; df -h
+          cp repo/repo /usr/bin/ || cp repo/repo /usr/local/bin/ || cp repo/repo /c/Windows/System32/
+          
+          # Очистка (команды Linux)
+          echo "Bypass sudo commands for cleaning on Windows runner"
 
-      # --- 2. Загрузка FriendlyWrt и Кэширование ---
+      # --- 3. Загрузка FriendlyWrt source (repo init/sync) ---
       - name: Download FriendlyWrt source (repo init/sync)
         run: |
-          mkdir -p friendlywrt-project; cd friendlywrt-project
-          repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests -b master-v${{ inputs.friendlywrt_version }} -m ${{ matrix.target_cpu }}.xml --repo-url=https://github.com/friendlyarm/repo --no-clone-bundle
-          repo sync -c --no-clone-bundle || { echo "⚠️ First sync attempt failed, retrying..."; repo sync -c --no-clone-bundle; }
+          mkdir -p friendlywrt-project
+          cd friendlywrt-project
+          
+          repo init --depth=1 \
+            -u https://github.com/friendlyarm/friendlywrt_manifests \
+            -b master-v${{ inputs.friendlywrt_version }} \
+            -m ${{ matrix.target_cpu }}.xml \
+            --repo-url=https://github.com/friendlyarm/repo \
+            --no-clone-bundle
+          
+          repo sync -c --no-clone-bundle || {
+            echo "⚠️ First sync attempt failed, retrying..."
+            repo sync -c --no-clone-bundle
+          }
 
-      - name: Cache FriendlyWrt Download Folder (dl)
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.BUILD_DIR }}/dl
-          key: dl-${{ inputs.friendlywrt_version }}-${{ matrix.target_cpu }}-${{ hashFiles('${{ env.BUILD_DIR }}/feeds.conf.default') }}
-
-      - name: Cache Toolchain and Build Folder
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.BUILD_DIR }}/staging_dir
-            ${{ env.BUILD_DIR }}/build_dir
-            ${{ env.BUILD_DIR }}/tmp
-          key: toolchain-${{ inputs.friendlywrt_version }}-${{ matrix.target_cpu }}-${{ hashFiles('${{ env.BUILD_DIR }}/.config') }}
-          restore-keys: |
-            toolchain-${{ inputs.friendlywrt_version }}-${{ matrix.target_cpu }}-
-
-      # --- 3. Конфигурация и загрузка (ПОРЯДОК ИСПРАВЛЕН) ---
+      # --- 4. Настройка сборки ---
       - name: Setup AmneziaWG feed, update/install feeds
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== Adding AmneziaWG feed ==="
           echo "src-cpy amneziawg ../../amneziawg-openwrt" >> feeds.conf.default
           
-          # 👈 ИСПРАВЛЕНИЕ: Добавление логики повторных попыток для обновления фидов
           ATTEMPTS=3
           for i in $(seq 1 $ATTEMPTS); do
             echo "=== Attempt $i to update feeds... ==="
@@ -142,7 +160,6 @@ jobs:
             fi
           done
           
-          echo "=== Installing feeds ==="
           ./scripts/feeds install -a
           
           TARGET_IMAGE_DIRNAME=friendlywrt$(echo ${{ inputs.friendlywrt_version }} | awk -F . '{print $1}')
@@ -153,120 +170,104 @@ jobs:
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          make defconfig 
+          make defconfig
           
           cat >> .config << EOF
+          # Target configuration (minimal)
           CONFIG_TARGET_rockchip=y
           CONFIG_TARGET_rockchip_armv8=y
+          
+          # Enable AmneziaWG packages (as modules 'm')
           CONFIG_PACKAGE_kmod-amneziawg=m
           CONFIG_PACKAGE_amneziawg-tools=m
           CONFIG_PACKAGE_luci-proto-amneziawg=m
-          # CONFIG_PACKAGE_kmod-crypto-aead=m
-          # CONFIG_PACKAGE_kmod-crypto-hash=m
-          # CONFIG_PACKAGE_kmod-crypto-kpp=m
-          # CONFIG_PACKAGE_kmod-crypto-skcipher=m
-          # CONFIG_PACKAGE_kmod-crypto-manager2=m
-          # CONFIG_CRYPTO_BLAKE2S=y
+          
+          # Required kernel crypto modules 
+          CONFIG_PACKAGE_kmod-crypto-aead=m
+          CONFIG_PACKAGE_kmod-crypto-hash=m
+          CONFIG_PACKAGE_kmod-crypto-kpp=m
+          CONFIG_PACKAGE_kmod-crypto-skcipher=m
+          CONFIG_PACKAGE_kmod-crypto-manager2=m
+          
+          # Specific crypto algorithms required 
+          CONFIG_CRYPTO_BLAKE2S=y
           CONFIG_CRYPTO_CHACHA20=y
           CONFIG_CRYPTO_CHACHA20POLY1305=y
           CONFIG_CRYPTO_POLY1305=y
-          # CONFIG_CRYPTO_CURVE25519=y
-          EOF
+          CONFIG_CRYPTO_CURVE25519=y
           
+          # Disable building large images
+          # CONFIG_TARGET_ROOTFS_CPIOGZ is not set
+          # CONFIG_TARGET_ROOTFS_TARGZ is not set
+          # CONFIG_TARGET_ROOTFS_SQUASHFS is not set
+EOF
           make defconfig
 
-      - name: Download packages (using cache)
+      - name: Download packages
         run: |
           cd ${{ env.BUILD_DIR }}
-          make download -j$(nproc)
-          find dl -size -1024c -exec rm -f {} \; 2>/dev/null || true
-      
-      # --- 4. Сборка Toolchain и Kernel (РАЗДЕЛЕНИЕ НА 2 ШАГА) ---
+          # Используем -j1 для загрузки, чтобы не перегружать сеть/диск
+          make download -j1 
+
+      # --- 5. Сборка Toolchain и Kernel (Разделение для стабильности) ---
       
       - name: Build Toolchain (Critical, Throttled to -j1)
-        # 👈 FIX 1: Самый длинный и ресурсоемкий шаг запускается с одним потоком.
         run: |
           cd ${{ env.BUILD_DIR }}
-          echo "=== Building essential toolchain (STRONGLY THROTTLED -j1) ==="
+          # Throttled to -j1 for maximum stability on any self-hosted machine
           make toolchain/install -j1 V=s
 
       - name: Build Host Tools and Install Kernel Headers (FIX KMOD)
-        # 👈 FIX 2: Остальные, менее требовательные шаги, использующие все потоки.
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== Building host tools (Full Speed) ==="
+          # Используем все потоки, так как эти шаги быстрее
           make tools/install -j$(nproc) V=s || true
-          
-          echo "=== Installing target environment and kernel headers (Full Speed) ==="
           make target/install -j$(nproc) V=s
           make target/linux/install -j$(nproc) V=s
-          
-          echo "=== Checking headers ==="
-          find staging_dir -name "linux" -type d | head -3
 
       - name: Build crypto dependencies (kmod-* packages)
         run: |
           cd ${{ env.BUILD_DIR }}
-          echo "=== Building crypto kernel modules ==="
           make package/kernel/linux/compile -j$(nproc) V=s
 
-      # --- 5. Сборка AmneziaWG (Установка KMOD_PATH) ---
+      # --- 6. Сборка AmneziaWG ---
       - name: Set KMOD_PATH and Build AmneziaWG packages
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # Определяем KMOD_PATH один раз
           KMOD_PATH=$(ls feeds/amneziawg/ | grep -E "kmod|linux-kernel-module" | head -1)
-          echo "KMOD_PATH=$KMOD_PATH" >> $GITHUB_ENV
+          echo "KMOD_PATH=$KMOD_PATH" >> $GITHUB_ENV # Для использования в следующих шагах
           
           # 1. Build userspace tools
-          echo "--- Building amneziawg-tools ---"
-          make package/feeds/amneziawg/amneziawg-tools/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-tools.log || true
+          make package/feeds/amneziawg/amneziawg-tools/compile -j$(nproc) V=s || true
           
           # 2. Build kernel module
           if [ -n "$KMOD_PATH" ]; then
-            echo "--- Building kernel module: $KMOD_PATH ---"
-            make package/feeds/amneziawg/$KMOD_PATH/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-kmod.log || true
+            make package/feeds/amneziawg/$KMOD_PATH/compile -j$(nproc) V=s || true
           fi
           
           # 3. Build LuCI interface
-          echo "--- Building luci-proto-amneziawg ---"
-          make package/feeds/amneziawg/luci-proto-amneziawg/compile -j$(nproc) V=s 2>&1 | tee /tmp/build-luci.log || true
+          make package/feeds/amneziawg/luci-proto-amneziawg/compile -j$(nproc) V=s || true
           
-          # Install all successfully compiled packages
-          echo "=== Installing all packages ==="
+          # Install and Index
           make package/install -j$(nproc) V=s || true
-          
-          mkdir -p /tmp/build-logs; cp /tmp/build-*.log /tmp/build-logs/ 2>/dev/null || true
+          make package/index V=s
 
-
-      # --- 6. Артефакты и релиз ---
-      - name: Create package index and debug results
-        run: |
-          cd ${{ env.BUILD_DIR }}
-          make package/index V=s 2>&1 | grep -v "usign" || true
-          find bin -name "*amneziawg*.ipk" -type f -ls 2>/dev/null || echo "No AmneziaWG IPK files found."
-
+      # --- 7. Артефакты и релиз ---
       - name: Prepare artifacts - IPK files only
         shell: bash
         run: |
           set +e
-          cd ${{ env.BUILD_DIR }}
-          ARTIFACT_DIR=../../artifact/amneziawg-packages/${{ matrix.target_cpu }}
+          ARTIFACT_DIR=artifact/amneziawg-packages/${{ matrix.target_cpu }}
           mkdir -p "${ARTIFACT_DIR}"
           
-          find bin -name "*.ipk" -type f 2>/dev/null | while read file; do
-            filename=$(basename "$file")
-            if [[ "$filename" =~ (amneziawg|crypto-aead|crypto-hash|crypto-kpp|crypto-skcipher|crypto-chacha|crypto-poly|crypto-curve|crypto-blake) ]]; then
-              cp "$file" "${ARTIFACT_DIR}/" && echo "✅ Found: $filename" || true
-            fi
+          # Используем find и grep для поиска IPK
+          find ${{ env.BUILD_DIR }}/bin -name "*.ipk" -type f 2>/dev/null | grep -E "amneziawg|crypto-aead|crypto-hash|crypto-kpp|crypto-skcipher|crypto-chacha|crypto-poly|crypto-curve|crypto-blake" | while read file; do
+             cp "$file" "${ARTIFACT_DIR}/" && echo "✅ Found: $(basename "$file")" || true
           done
           
-          cp /tmp/build-logs/* "${ARTIFACT_DIR}/" 2>/dev/null || true
           echo "=== Total IPK files found: $(find "${ARTIFACT_DIR}" -name "*.ipk" -type f 2>/dev/null | wc -l) ==="
-          ls -lh "${ARTIFACT_DIR}/" || true
-          exit 0
 
       - name: Upload IPK packages to draft release
         if: always()
@@ -277,4 +278,3 @@ jobs:
           tag_name: ${{ needs.prepare_release.outputs.release_tag }}
           files: |
             artifact/amneziawg-packages/${{ matrix.target_cpu }}/*.ipk
-            artifact/amneziawg-packages/${{ matrix.target_cpu }}/*.txt
