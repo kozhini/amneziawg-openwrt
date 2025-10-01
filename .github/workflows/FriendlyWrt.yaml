@@ -86,12 +86,12 @@ jobs:
           free -h
 
       - name: Checkout repositories
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           submodules: true
 
       - name: Checkout AmneziaWG
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           repository: kozhini/amneziawg-openwrt
           path: amneziawg-openwrt
@@ -106,7 +106,14 @@ jobs:
             build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
             gettext git libncurses5-dev libssl-dev python3-distutils \
             rsync unzip zlib1g-dev file wget curl qemu-utils \
-            python3-setuptools swig libelf-dev
+            python3-setuptools python3-dev swig libelf-dev \
+            python3-pyelftools python3-pip
+          
+          # Убеждаемся что elftools установлен для Python3
+          python3 -c "import elftools" || sudo pip3 install pyelftools
+          
+          echo "=== Verifying Python3 elftools ==="
+          python3 -c "import elftools; print('✅ elftools version:', elftools.__version__)"
 
       - name: Setup repo tool
         run: |
@@ -119,11 +126,29 @@ jobs:
           mkdir -p friendlywrt-project
           cd friendlywrt-project
           
+          BRANCH="master-v${{ inputs.friendlywrt_version }}"
+          MANIFEST="${{ matrix.target_cpu }}.xml"
+          
+          echo "=== Using FriendlyWrt source ==="
+          echo "Branch: $BRANCH"
+          echo "Manifest: $MANIFEST"
+          echo "URL: https://github.com/friendlyarm/friendlywrt_manifests/tree/$BRANCH"
+          
+          echo "=== Verifying manifest exists ==="
+          if wget -q --spider "https://raw.githubusercontent.com/friendlyarm/friendlywrt_manifests/$BRANCH/$MANIFEST"; then
+            echo "✅ Manifest file exists: $MANIFEST"
+          else
+            echo "❌ ERROR: Manifest not found!"
+            echo "Available manifests at $BRANCH:"
+            wget -qO- "https://api.github.com/repos/friendlyarm/friendlywrt_manifests/contents/?ref=$BRANCH" | grep '"name"' | grep '.xml'
+            exit 1
+          fi
+          
           echo "=== Initializing repo ==="
           repo init --depth=1 \
             -u https://github.com/friendlyarm/friendlywrt_manifests \
-            -b master-v${{ inputs.friendlywrt_version }} \
-            -m ${{ matrix.target_cpu }}.xml \
+            -b $BRANCH \
+            -m $MANIFEST \
             --repo-url=https://github.com/friendlyarm/repo \
             --no-clone-bundle
           
@@ -133,11 +158,33 @@ jobs:
             repo sync -c --no-clone-bundle
           }
           
-          echo "=== Verifying structure ==="
+          echo "=== Verifying directory structure ==="
           ls -la
-          [ -d "friendlywrt" ] && echo "✅ friendlywrt" || echo "❌ friendlywrt missing"
-          [ -d "kernel" ] && echo "✅ kernel" || echo "❌ kernel missing"
-          [ -d "toolchain" ] && echo "✅ toolchain" || echo "❌ toolchain missing"
+          
+          # Проверяем ключевые директории
+          for dir in friendlywrt kernel toolchain scripts configs device; do
+            if [ -d "$dir" ]; then
+              echo "✅ $dir exists"
+              ls -la "$dir" | head -5
+            else
+              echo "⚠️ $dir missing"
+            fi
+          done
+          
+          # Проверяем kernel с ARM64 crypto
+          if [ -d "kernel" ]; then
+            echo "=== Checking kernel version ==="
+            if [ -f "kernel/Makefile" ]; then
+              grep "^VERSION\|^PATCHLEVEL" kernel/Makefile | head -2
+            fi
+            
+            if [ -d "kernel/arch/arm64/crypto" ]; then
+              echo "✅ ARM64 NEON crypto available"
+              ls kernel/arch/arm64/crypto/ | grep -E "chacha|poly|curve|blake" | head -5
+            else
+              echo "⚠️ ARM64 crypto not found"
+            fi
+          fi
 
       - name: Setup AmneziaWG feed
         run: |
@@ -358,4 +405,22 @@ jobs:
           
           if [ $IPK_COUNT -eq 0 ]; then
             echo "" >> "${ARTIFACT_DIR}/BUILD-REPORT.txt"
-            echo "❌ BUILD FAILED - No IPK files generated" >> "${ARTIFACT_DIR}/BU
+            echo "❌ BUILD FAILED - No IPK files generated" >> "${ARTIFACT_DIR}/BUILD-REPORT.txt"
+            echo "Check logs/ directory for error details" >> "${ARTIFACT_DIR}/BUILD-REPORT.txt"
+          fi
+          
+          cat "${ARTIFACT_DIR}/BUILD-REPORT.txt"
+          
+          exit 0
+
+      - name: Upload artifacts to release
+        if: always()
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.prepare_release.outputs.release_tag }}
+          files: |
+            artifact/amneziawg-packages/${{ matrix.target_cpu }}/*.ipk
+            artifact/amneziawg-packages/${{ matrix.target_cpu }}/BUILD-REPORT.txt
+            artifact/amneziawg-packages/${{ matrix.target_cpu }}/logs/*.log
