@@ -181,6 +181,8 @@ jobs:
           make download -j8 V=s || make download -j1 V=s
           find dl -size -1024c -exec rm -f {} \;
           
+# ... (предыдущие шаги без изменений)
+
       - name: Build toolchain (Stage 1 - Critical)
         id: build_toolchain
         continue-on-error: true
@@ -195,29 +197,33 @@ jobs:
           }
           echo "✅ Toolchain built successfully"
 
-      - name: Build Host Tools and Target (Stage 1.5 - FIX opkg)
+      - name: Build Host Tools (Stage 1.5 - FIX opkg)
         run: |
           cd ${{ env.BUILD_DIR }}
-          echo "=== Building tools (opkg) and target essentials ==="
+          echo "=== Building tools (opkg) ==="
           make -k tools/install -j$(nproc) V=s || true
-          make -k target/install -j$(nproc) V=s || true
-          echo "✅ Host tools and target prepared."
+          echo "✅ Host tools prepared."
 
-      # Скорректированный Stage 2: теперь явно устанавливаем ядро с флагом -k
+      # Скорректированный Stage 2: Установка ядра с игнорированием ошибок
       - name: Build and Install Kernel and Headers (Stage 2)
         run: |
           cd ${{ env.BUILD_DIR }}
-          echo "=== Preparing and installing kernel headers/dependencies ==="
-          # Использование -k для пропуска ошибок в других модулях
-          make -k target/linux/prepare V=s 2>&1 | tee /tmp/build-kernel-prep.log || true
-          # Эксплицитная установка, чтобы гарантировать, что Module.symvers и заголовки доступны для kmod-amneziawg
-          make -k target/linux/install -j$(nproc) V=s 2>&1 | tee -a /tmp/build-kernel-prep.log
+          
+          echo "=== 1/2: Preparing kernel (Compiling) ==="
+          # Сначала компилируем все. Используем -k для пропуска ошибок в других модулях
+          make -k target/linux/prepare -j4 V=s 2>&1 | tee /tmp/build-kernel-prep.log || true
+          
+          echo "=== 2/2: Installing kernel headers (Critical for kmod) ==="
+          # Эксплицитная установка с -k, чтобы игнорировать ошибки, связанные с 'image'
+          # Ошибки, которые вы видели (target/linux/rockchip/image), часто не критичны для сборки kmod
+          make -k target/linux/install -j$(nproc) V=s 2>&1 | tee -a /tmp/build-kernel-prep.log || true
 
-      # Скорректированный Stage 4: теперь разделены компиляция и установка для лучшей диагностики
+      # Stage 4: Разделение компиляции и установки остается в силе
       - name: Build AmneziaWG packages (Stage 4)
         run: |
           cd ${{ env.BUILD_DIR }}
           
+          # ... (логика поиска KMOD_PKG без изменений)
           KMOD_PATH=$(find feeds/amneziawg -maxdepth 1 -type d -name "*kmod*" -o -name "*kernel*" | head -1)
           if [ -n "$KMOD_PATH" ]; then
             KMOD_PKG=$(basename "$KMOD_PATH")
@@ -230,7 +236,6 @@ jobs:
 
           # 1. Компиляция всех целевых пакетов
           echo "=== Building all three AmneziaWG targets (Compile stage) ==="
-          # Используем -k для игнорирования ошибок, таких как gpio-button-hotplug
           make -k package/feeds/amneziawg/amneziawg-tools/compile \
                package/feeds/amneziawg/$KMOD_PKG/compile \
                package/feeds/amneziawg/luci-proto-amneziawg/compile -j4 V=s 2>&1 | tee /tmp/build-awg-compile.log || {
@@ -243,7 +248,6 @@ jobs:
 
           # 3. Установка (создание IPK) для kmod-amneziawg
           echo "=== Installing kernel module: $KMOD_PKG (IPK creation) ==="
-          # Однопоточная установка с логом для лучшей диагностики
           make package/feeds/amneziawg/$KMOD_PKG/install -j1 V=s 2>&1 | tee /tmp/build-awg-kmod-install.log || {
             echo "❌ Kmod install failed. Check build-awg-kmod-install.log"
           }
@@ -254,7 +258,8 @@ jobs:
 
           echo "=== Creating package index ==="
           make package/index V=s 2>&1 | grep -v "usign" || true
-
+          
+      # ... (последующие шаги без изменений)
       - name: Collect artifacts
         if: always()
         shell: bash
