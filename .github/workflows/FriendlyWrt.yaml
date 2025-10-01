@@ -177,10 +177,10 @@ jobs:
           CONFIG_PACKAGE_kmod-amneziawg=m
           CONFIG_PACKAGE_amneziawg-tools=m
           CONFIG_PACKAGE_luci-proto-amneziawg=m
-          # Удалены явные CONFIG_PACKAGE_kmod-crypto-*=m, остаются только настройки ядра
+          # Настройки криптографии ядра, необходимые для kmod-amneziawg
           CONFIG_CRYPTO_CHACHA20=y
           CONFIG_CRYPTO_POLY1305=y
-          CONFIG_CRYPTO_chacha20poly1305=y
+          CONFIG_CRYPTO_CHACHA20POLY1305=y
           CONFIG_CRYPTO_CURVE25519=y
           EOF
           
@@ -223,11 +223,10 @@ jobs:
         run: |
           cd ${{ env.BUILD_DIR }}
           echo "=== Preparing kernel ==="
-          make target/linux/prepare -j4 V=s 2>&1 | tee /tmp/build-kernel-prep.log || true
+          # Добавляем -k, чтобы проигнорировать потенциальные ошибки при компиляции других модулей ядра
+          make -k target/linux/prepare -j4 V=s 2>&1 | tee /tmp/build-kernel-prep.log || true
 
-      # Шаг "Build crypto modules (Stage 3)" удален. Зависимости будут собраны в Stage 4.
-          
-      - name: Build AmneziaWG packages (Stage 4)
+      - name: Build AmneziaWG packages (Stage 4 - With -k to ignore other module errors)
         run: |
           cd ${{ env.BUILD_DIR }}
           
@@ -242,30 +241,35 @@ jobs:
           fi
           
           echo "=== Building amneziawg-tools ==="
-          make package/feeds/amneziawg/amneziawg-tools/compile -j4 V=s 2>&1 | tee /tmp/build-awg-tools.log || {
+          # Добавляем -k
+          make -k package/feeds/amneziawg/amneziawg-tools/compile -j4 V=s 2>&1 | tee /tmp/build-awg-tools.log || {
             echo "⚠️ Tools build failed"
             tail -100 /tmp/build-awg-tools.log
           }
           
           if [ -n "$KMOD_PKG" ]; then
             echo "=== Building kernel module: $KMOD_PKG ==="
-            make package/feeds/amneziawg/$KMOD_PKG/compile -j4 V=s 2>&1 | tee /tmp/build-awg-kmod.log || {
+            # Добавляем -k
+            make -k package/feeds/amneziawg/$KMOD_PKG/compile -j4 V=s 2>&1 | tee /tmp/build-awg-kmod.log || {
               echo "⚠️ Trying single-threaded build..."
-              make package/feeds/amneziawg/$KMOD_PKG/compile -j1 V=s 2>&1 | tee -a /tmp/build-awg-kmod.log
+              make -k package/feeds/amneziawg/$KMOD_PKG/compile -j1 V=s 2>&1 | tee -a /tmp/build-awg-kmod.log
             }
           fi
           
           echo "=== Building luci-proto-amneziawg ==="
-          make package/feeds/amneziawg/luci-proto-amneziawg/compile -j4 V=s 2>&1 | tee /tmp/build-awg-luci.log || {
+          # Добавляем -k
+          make -k package/feeds/amneziawg/luci-proto-amneziawg/compile -j4 V=s 2>&1 | tee /tmp/build-awg-luci.log || {
             echo "⚠️ LuCI build failed"
             tail -100 /tmp/build-awg-luci.log
           }
           
           echo "=== Installing packages ==="
-          make package/install -j4 V=s || true
+          # Добавляем -k
+          make -k package/install -j4 V=s || true
           
           echo "=== Creating package index ==="
-          make package/index V=s 2>&1 | grep -v "usign" || true
+          # Добавляем -k
+          make -k package/index V=s 2>&1 | grep -v "usign" || true
 
       - name: Collect artifacts
         if: always()
@@ -291,7 +295,7 @@ jobs:
           # Копируем все логи
           cp /tmp/build-*.log "${ARTIFACT_DIR}/logs/" 2>/dev/null || true
           
-          # 👈 ИСПРАВЛЕНИЕ: ВСЕ строки, включая EOF, теперь имеют 10 пробелов отступа
+          # ИСПРАВЛЕНИЕ YAML: Все строки Heredoc имеют отступ
           cat > "${ARTIFACT_DIR}/BUILD-REPORT.txt" << EOF
           AmneziaWG Build Report
           =====================
