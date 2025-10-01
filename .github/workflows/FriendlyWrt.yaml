@@ -312,16 +312,27 @@ jobs:
       - name: Build AmneziaWG packages (Stage 4)
         run: |
           cd friendlywrt-project/friendlywrt
+
+          # Определяем полный путь к каталогу KMOD-пакета
+          KMOD_PATH=$(find feeds/amneziawg -maxdepth 1 -type d -name "*kmod*" -o -name "*kernel*" | head -1)
+
+          # Извлекаем только имя каталога, используя чистый Bash (basename)
+          if [ -n "$KMOD_PATH" ]; then
+            KMOD_PKG=$(basename "$KMOD_PATH")
+            echo "✅ KMOD Package found: $KMOD_PKG"
+          else
+            KMOD_PKG=""
+            echo "⚠️ KMOD Package NOT found in feeds/amneziawg"
+          fi
           
-          # Определяем имя kernel module пакета
-          KMOD_PKG=$(find feeds/amneziawg -maxdepth 1 -type d -name "*kmod*" -o -name "*kernel*" | head -1 | xargs basename)
-          
+          # --- Сборка пакетов ---
+
           echo "=== Building amneziawg-tools ==="
           make package/feeds/amneziawg/amneziawg-tools/compile -j4 V=s 2>&1 | tee /tmp/build-awg-tools.log || {
             echo "⚠️ Tools build failed"
             tail -100 /tmp/build-awg-tools.log
           }
-          
+
           if [ -n "$KMOD_PKG" ]; then
             echo "=== Building kernel module: $KMOD_PKG ==="
             make package/feeds/amneziawg/$KMOD_PKG/compile -j4 V=s 2>&1 | tee /tmp/build-awg-kmod.log || {
@@ -329,16 +340,16 @@ jobs:
               make package/feeds/amneziawg/$KMOD_PKG/compile -j1 V=s 2>&1 | tee -a /tmp/build-awg-kmod.log
             }
           fi
-          
+
           echo "=== Building luci-proto-amneziawg ==="
           make package/feeds/amneziawg/luci-proto-amneziawg/compile -j4 V=s 2>&1 | tee /tmp/build-awg-luci.log || {
             echo "⚠️ LuCI build failed"
             tail -100 /tmp/build-awg-luci.log
           }
-          
+
           echo "=== Installing packages ==="
           make package/install -j4 V=s || true
-          
+
           echo "=== Creating package index ==="
           make package/index V=s 2>&1 | grep -v "usign" || true
 
