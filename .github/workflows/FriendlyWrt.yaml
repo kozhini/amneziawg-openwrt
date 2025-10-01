@@ -178,13 +178,35 @@ jobs:
       - name: Disable problematic package
         run: |
           cd ${{ env.BUILD_DIR }}
-          # Исключаем пакет gpio-button-hotplug, который ломает компиляцию ядра
-          sed -i '/CONFIG_PACKAGE_gpio-button-hotplug/d' .config
           
-          # Повторно запускаем defconfig, чтобы учесть изменения и сохранить зависимости
+          echo "=== Disabling gpio-button-hotplug to fix kernel build ==="
+          
+          # Используем scripts/config для явного отключения пакета.
+          # Флаг '-d' (disable) более надежен, чем sed.
+          
+          # Отключаем CONFIG_PACKAGE_
+          ./scripts/config --file .config -d CONFIG_PACKAGE_gpio_button_hotplug
+          ./scripts/config --file .config -d CONFIG_PACKAGE_kmod_gpio_button_hotplug
+          
+          # Отключаем CONFIG_DEFAULT_ (чтобы make defconfig не добавил его снова)
+          ./scripts/config --file .config -d CONFIG_DEFAULT_gpio_button_hotplug
+          ./scripts/config --file .config -d CONFIG_DEFAULT_kmod_gpio_button_hotplug
+          
+          # Запускаем defconfig для финализации изменений и удаления зависимостей
           make defconfig
-          echo "✅ gpio-button-hotplug excluded from build to prevent kernel failure."
-          grep "gpio-button-hotplug" .config || echo "✅ Package successfully removed from .config"
+          
+          echo "✅ gpio-button-hotplug explicitly disabled."
+          # Проверка: если пакет присутствует, он должен быть отключен (=n).
+          if grep "gpio-button-hotplug" .config; then
+              if grep "gpio-button-hotplug=n" .config; then
+                  echo "✅ Package successfully disabled (=n)."
+              else
+                  echo "❌ ERROR: Package still enabled!"
+                  exit 1
+              fi
+          else
+              echo "✅ Package successfully removed from .config"
+          fi
           
       - name: Download packages
         run: |
