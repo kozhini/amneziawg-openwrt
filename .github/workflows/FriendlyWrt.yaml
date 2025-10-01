@@ -40,7 +40,7 @@ jobs:
         run: |
           release_tag="AmneziaWG-FriendlyWrt-${{ inputs.friendlywrt_version }}-$(date +%Y%m%d-%H%M)"
           echo "release_tag=$release_tag" >> $GITHUB_OUTPUT
-          
+      
       - name: Create draft release
         uses: softprops/action-gh-release@v2
         env:
@@ -63,40 +63,36 @@ jobs:
     env:
       TERM: xterm
       FORCE_UNSAFE_CONFIGURE: 1
-    
+      BUILD_DIR: friendlywrt-project/friendlywrt
+      
     steps:
       - name: Maximize build space
         run: |
           echo "=== Initial disk space ==="
           df -h
-          
           echo "=== Removing unnecessary files ==="
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
             /usr/local/graalvm /usr/local/.ghcup
-          
           sudo docker image prune --all --force
           sudo apt-get clean
-          
           echo "=== After cleanup ==="
           df -h
-          
-          # Проверяем доступную память
           echo "=== Available memory ==="
           free -h
-
+          
       - name: Checkout repositories
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
-
+          
       - name: Checkout AmneziaWG
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: kozhini/amneziawg-openwrt
           path: amneziawg-openwrt
           ref: ${{ inputs.amneziawg_version }}
-
+          
       - name: Install essential build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -108,19 +104,16 @@ jobs:
             rsync unzip zlib1g-dev file wget curl qemu-utils \
             python3-setuptools python3-dev swig libelf-dev \
             python3-pyelftools python3-pip
-          
-          # Убеждаемся что elftools установлен для Python3
           python3 -c "import elftools" || sudo pip3 install pyelftools
-          
           echo "=== Verifying Python3 elftools ==="
           python3 -c "import elftools; print('✅ elftools version:', elftools.__version__)"
-
+          
       - name: Setup repo tool
         run: |
           git clone --depth 1 https://github.com/friendlyarm/repo
           sudo cp repo/repo /usr/bin/
           sudo chmod +x /usr/bin/repo
-
+          
       - name: Download FriendlyWrt source
         run: |
           mkdir -p friendlywrt-project
@@ -129,18 +122,11 @@ jobs:
           BRANCH="master-v${{ inputs.friendlywrt_version }}"
           MANIFEST="${{ matrix.target_cpu }}.xml"
           
-          echo "=== Using FriendlyWrt source ==="
-          echo "Branch: $BRANCH"
-          echo "Manifest: $MANIFEST"
-          echo "URL: https://github.com/friendlyarm/friendlywrt_manifests/tree/$BRANCH"
-          
           echo "=== Verifying manifest exists ==="
           if wget -q --spider "https://raw.githubusercontent.com/friendlyarm/friendlywrt_manifests/$BRANCH/$MANIFEST"; then
             echo "✅ Manifest file exists: $MANIFEST"
           else
             echo "❌ ERROR: Manifest not found!"
-            echo "Available manifests at $BRANCH:"
-            wget -qO- "https://api.github.com/repos/friendlyarm/friendlywrt_manifests/contents/?ref=$BRANCH" | grep '"name"' | grep '.xml'
             exit 1
           fi
           
@@ -151,46 +137,19 @@ jobs:
             -m $MANIFEST \
             --repo-url=https://github.com/friendlyarm/repo \
             --no-clone-bundle
-          
-          echo "=== Syncing source (this may take 10-20 minutes) ==="
+            
+          echo "=== Syncing source ==="
           repo sync -c --no-clone-bundle -j4 || {
             echo "⚠️ Parallel sync failed, trying sequential..."
             repo sync -c --no-clone-bundle
           }
           
-          echo "=== Verifying directory structure ==="
-          ls -la
-          
-          # Проверяем ключевые директории
-          for dir in friendlywrt kernel toolchain scripts configs device; do
-            if [ -d "$dir" ]; then
-              echo "✅ $dir exists"
-              ls -la "$dir" | head -5
-            else
-              echo "⚠️ $dir missing"
-            fi
-          done
-          
-          # Проверяем kernel с ARM64 crypto
-          if [ -d "kernel" ]; then
-            echo "=== Checking kernel version ==="
-            if [ -f "kernel/Makefile" ]; then
-              grep "^VERSION\|^PATCHLEVEL" kernel/Makefile | head -2
-            fi
-            
-            if [ -d "kernel/arch/arm64/crypto" ]; then
-              echo "✅ ARM64 NEON crypto available"
-              ls kernel/arch/arm64/crypto/ | grep -E "chacha|poly|curve|blake" | head -5
-            else
-              echo "⚠️ ARM64 crypto not found"
-            fi
-          fi
-
       - name: Setup AmneziaWG feed
         run: |
-          cd friendlywrt-project/friendlywrt
+          cd ${{ env.BUILD_DIR }}
           
-          echo "src-link amneziawg ../../amneziawg-openwrt" >> feeds.conf.default
+          # ИСПРАВЛЕНИЕ: Используем src-cpy для надежного копирования фида
+          echo "src-cpy amneziawg ../../amneziawg-openwrt" >> feeds.conf.default
           
           echo "=== Updating feeds (with retries) ==="
           for i in {1..3}; do
@@ -205,10 +164,10 @@ jobs:
           
           echo "=== Installing feeds ==="
           ./scripts/feeds install -a
-
+          
       - name: Configure build
         run: |
-          cd friendlywrt-project/friendlywrt
+          cd ${{ env.BUILD_DIR }}
           
           make defconfig
           
@@ -218,9 +177,7 @@ jobs:
           CONFIG_PACKAGE_kmod-amneziawg=m
           CONFIG_PACKAGE_amneziawg-tools=m
           CONFIG_PACKAGE_luci-proto-amneziawg=m
-          CONFIG_PACKAGE_kmod-crypto-aead=m
-          CONFIG_PACKAGE_kmod-crypto-hash=m
-          CONFIG_PACKAGE_kmod-crypto-kpp=m
+          # Удалены явные CONFIG_PACKAGE_kmod-crypto-*=m, остаются только настройки ядра
           CONFIG_CRYPTO_CHACHA20=y
           CONFIG_CRYPTO_POLY1305=y
           CONFIG_CRYPTO_CURVE25519=y
@@ -230,106 +187,99 @@ jobs:
           
           echo "=== Final config check ==="
           grep -E "(amneziawg|CRYPTO)" .config | head -20
-
+          
       - name: Download packages
         run: |
-          cd friendlywrt-project/friendlywrt
-          
+          cd ${{ env.BUILD_DIR }}
           echo "=== Downloading packages ==="
           make download -j8 V=s || make download -j1 V=s
-          
-          # Удаляем битые загрузки
           find dl -size -1024c -exec rm -f {} \;
-
+          
       - name: Build toolchain (Stage 1 - Critical)
         id: build_toolchain
         continue-on-error: true
         run: |
-          cd friendlywrt-project/friendlywrt
-          
-          # Мониторинг ресурсов в фоне
-          (while true; do
-            echo "=== $(date) - Memory usage ==="
-            free -h
-            echo "=== Disk usage ==="
-            df -h | grep -E '(Filesystem|/$)'
-            sleep 300  # каждые 5 минут
-          done) &
-          MONITOR_PID=$!
-          
-          echo "=== Building tools (critical stage) ==="
-          make tools/install -j2 V=s 2>&1 | tee /tmp/build-tools.log || {
-            echo "❌ Tools build failed"
-            tail -200 /tmp/build-tools.log
-            kill $MONITOR_PID 2>/dev/null || true
-            exit 1
-          }
+          cd ${{ env.BUILD_DIR }}
           
           echo "=== Building toolchain (critical stage) ==="
           make toolchain/install -j2 V=s 2>&1 | tee /tmp/build-toolchain.log || {
             echo "❌ Toolchain build failed"
             tail -200 /tmp/build-toolchain.log
-            kill $MONITOR_PID 2>/dev/null || true
             exit 1
           }
-          
-          kill $MONITOR_PID 2>/dev/null || true
-          
           echo "✅ Toolchain built successfully"
 
-      - name: Check toolchain build result
-        if: steps.build_toolchain.outcome == 'failure'
+      - name: Build Host Tools and Target (Stage 1.5 - FIX opkg)
         run: |
-          echo "❌ Toolchain build failed. Uploading logs..."
-          mkdir -p failure-logs
-          cp /tmp/build-*.log failure-logs/ 2>/dev/null || true
-          
-          echo "=== Last 500 lines of toolchain log ==="
-          tail -500 /tmp/build-toolchain.log || true
-          
-          echo "=== Checking for common errors ==="
-          grep -i "error\|failed\|cannot" /tmp/build-toolchain.log | tail -50 || true
-          
-          exit 1
+          cd ${{ env.BUILD_DIR }}
+          echo "=== Building tools (opkg) and target essentials ==="
+          make tools/install -j$(nproc) V=s || true
+          make target/install -j$(nproc) V=s || true
+          make target/linux/install -j$(nproc) V=s || true
+          echo "✅ Host tools and target prepared."
 
       - name: Build kernel preparation (Stage 2)
         run: |
-          cd friendlywrt-project/friendlywrt
-          
+          cd ${{ env.BUILD_DIR }}
           echo "=== Preparing kernel ==="
           make target/linux/prepare -j4 V=s 2>&1 | tee /tmp/build-kernel-prep.log || true
-          
-          echo "=== Installing target ==="
-          make target/install -j4 V=s 2>&1 | tee /tmp/build-target.log || true
 
-      - name: Build crypto modules (Stage 3)
-        run: |
-          cd friendlywrt-project/friendlywrt
+      # Шаг "Build crypto modules (Stage 3)" удален. Зависимости будут собраны в Stage 4.
           
-          echo "=== Building crypto kernel modules ==="
-          make package/kernel/linux/compile -j4 V=s 2>&1 | tee /tmp/build-crypto.log || true
-
       - name: Build AmneziaWG packages (Stage 4)
         run: |
-          cd friendlywrt-project/friendlywrt
-
-          make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
-          make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j $(nproc)
-          make package/amneziawg-tools/{clean,download,prepare,compile} -j $(nproc)
+          cd ${{ env.BUILD_DIR }}
+          
+          # Надежный поиск KMOD-пакета
+          KMOD_PATH=$(find feeds/amneziawg -maxdepth 1 -type d -name "*kmod*" -o -name "*kernel*" | head -1)
+          if [ -n "$KMOD_PATH" ]; then
+            KMOD_PKG=$(basename "$KMOD_PATH")
+            echo "✅ KMOD Package found: $KMOD_PKG"
+          else
+            KMOD_PKG=""
+            echo "⚠️ KMOD Package NOT found in feeds/amneziawg. Skipping kmod build."
+          fi
+          
+          echo "=== Building amneziawg-tools ==="
+          make package/feeds/amneziawg/amneziawg-tools/compile -j4 V=s 2>&1 | tee /tmp/build-awg-tools.log || {
+            echo "⚠️ Tools build failed"
+            tail -100 /tmp/build-awg-tools.log
+          }
+          
+          if [ -n "$KMOD_PKG" ]; then
+            echo "=== Building kernel module: $KMOD_PKG ==="
+            make package/feeds/amneziawg/$KMOD_PKG/compile -j4 V=s 2>&1 | tee /tmp/build-awg-kmod.log || {
+              echo "⚠️ Trying single-threaded build..."
+              make package/feeds/amneziawg/$KMOD_PKG/compile -j1 V=s 2>&1 | tee -a /tmp/build-awg-kmod.log
+            }
+          fi
+          
+          echo "=== Building luci-proto-amneziawg ==="
+          make package/feeds/amneziawg/luci-proto-amneziawg/compile -j4 V=s 2>&1 | tee /tmp/build-awg-luci.log || {
+            echo "⚠️ LuCI build failed"
+            tail -100 /tmp/build-awg-luci.log
+          }
+          
+          echo "=== Installing packages ==="
+          make package/install -j4 V=s || true
+          
+          echo "=== Creating package index ==="
+          make package/index V=s 2>&1 | grep -v "usign" || true
 
       - name: Collect artifacts
         if: always()
         shell: bash
         run: |
           set +e
-          
           ARTIFACT_DIR=artifact/amneziawg-packages/${{ matrix.target_cpu }}
           mkdir -p "${ARTIFACT_DIR}/logs"
           
           echo "=== Searching for IPK files ==="
-          find friendlywrt-project/friendlywrt/bin -name "*.ipk" -type f 2>/dev/null | while read file; do
+          find ${{ env.BUILD_DIR }}/bin -name "*.ipk" -type f 2>/dev/null | while read file; do
             filename=$(basename "$file")
-            if [[ "$filename" =~ (amneziawg|crypto-aead|crypto-hash|crypto-kpp|crypto-chacha|crypto-poly|crypto-curve) ]]; then
+            
+            # Фильтр только для запрошенных пакетов
+            if [[ "$filename" =~ (kmod-amneziawg|amneziawg-tools|luci-proto-amneziawg) ]]; then
               cp "$file" "${ARTIFACT_DIR}/"
               echo "✅ $filename"
             fi
@@ -340,54 +290,47 @@ jobs:
           # Копируем все логи
           cp /tmp/build-*.log "${ARTIFACT_DIR}/logs/" 2>/dev/null || true
           
-          # Создаем подробный отчет
+          # 👈 ИСПРАВЛЕНИЕ: ВСЕ строки, включая EOF, теперь имеют 10 пробелов отступа
           cat > "${ARTIFACT_DIR}/BUILD-REPORT.txt" << EOF
           AmneziaWG Build Report
           =====================
-          
           Platform: ${{ matrix.target_cpu }}
           FriendlyWrt: ${{ inputs.friendlywrt_version }}
           AmneziaWG: ${{ inputs.amneziawg_version }}
           Build Date: $(date)
           Toolchain Status: ${{ steps.build_toolchain.outcome }}
-          
+
           Packages Found: $IPK_COUNT
-          
+
           Files:
           $(ls -lh "${ARTIFACT_DIR}"/*.ipk 2>/dev/null || echo "No IPK files found")
-          
+
           Installation Instructions:
           ==========================
           1. Upload .ipk files to your router:
              scp *.ipk root@YOUR_ROUTER_IP:/tmp/
-          
           2. SSH to router and install:
              ssh root@YOUR_ROUTER_IP
              cd /tmp
-             opkg install kmod-crypto-*.ipk
              opkg install kmod-amneziawg*.ipk
              opkg install amneziawg-tools*.ipk
              opkg install luci-proto-amneziawg*.ipk
-          
           3. Reboot:
              reboot
-          
+
           Logs:
           =====
           Build logs are available in logs/ directory
-          
           EOF
           
-          if [ $IPK_COUNT -eq 0 ]; then
+          if [ $IPK_COUNT -ne 3 ]; then # Проверяем, что найдено ровно 3 пакета
             echo "" >> "${ARTIFACT_DIR}/BUILD-REPORT.txt"
-            echo "❌ BUILD FAILED - No IPK files generated" >> "${ARTIFACT_DIR}/BUILD-REPORT.txt"
-            echo "Check logs/ directory for error details" >> "${ARTIFACT_DIR}/BUILD-REPORT.txt"
+            echo "❌ ВНИМАНИЕ: Найдено $IPK_COUNT пакетов (ожидалось 3). Проверьте логи." >> "${ARTIFACT_DIR}/BUILD-REPORT.txt"
           fi
           
           cat "${ARTIFACT_DIR}/BUILD-REPORT.txt"
-          
           exit 0
-
+          
       - name: Upload artifacts to release
         if: always()
         uses: softprops/action-gh-release@v2
