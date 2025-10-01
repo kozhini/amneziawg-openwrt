@@ -86,12 +86,12 @@ jobs:
           free -h
 
       - name: Checkout repositories
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
 
       - name: Checkout AmneziaWG
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: kozhini/amneziawg-openwrt
           path: amneziawg-openwrt
