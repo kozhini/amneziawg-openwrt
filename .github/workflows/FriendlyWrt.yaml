@@ -173,6 +173,18 @@ jobs:
           
           echo "=== Final config check ==="
           grep -E "(amneziawg|CRYPTO)" .config | head -20
+
+      # НОВЫЙ КРИТИЧЕСКИ ВАЖНЫЙ ШАГ
+      - name: Disable problematic package
+        run: |
+          cd ${{ env.BUILD_DIR }}
+          # Исключаем пакет gpio-button-hotplug, который ломает компиляцию ядра
+          sed -i '/CONFIG_PACKAGE_gpio-button-hotplug/d' .config
+          
+          # Повторно запускаем defconfig, чтобы учесть изменения и сохранить зависимости
+          make defconfig
+          echo "✅ gpio-button-hotplug excluded from build to prevent kernel failure."
+          grep "gpio-button-hotplug" .config || echo "✅ Package successfully removed from .config"
           
       - name: Download packages
         run: |
