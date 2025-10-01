@@ -66,21 +66,6 @@ jobs:
       BUILD_DIR: friendlywrt-project/friendlywrt
       
     steps:
-      - name: Maximize build space
-        run: |
-          echo "=== Initial disk space ==="
-          df -h
-          echo "=== Removing unnecessary files ==="
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
-            /usr/local/graalvm /usr/local/.ghcup
-          sudo docker image prune --all --force
-          sudo apt-get clean
-          echo "=== After cleanup ==="
-          df -h
-          echo "=== Available memory ==="
-          free -h
-          
       - name: Checkout repositories
         uses: actions/checkout@v5
         with:
@@ -214,62 +199,61 @@ jobs:
         run: |
           cd ${{ env.BUILD_DIR }}
           echo "=== Building tools (opkg) and target essentials ==="
-          make tools/install -j$(nproc) V=s || true
-          make target/install -j$(nproc) V=s || true
-          make target/linux/install -j$(nproc) V=s || true
+          make -k tools/install -j$(nproc) V=s || true
+          make -k target/install -j$(nproc) V=s || true
           echo "✅ Host tools and target prepared."
 
-      - name: Build kernel preparation (Stage 2)
+      # Скорректированный Stage 2: теперь явно устанавливаем ядро с флагом -k
+      - name: Build and Install Kernel and Headers (Stage 2)
         run: |
           cd ${{ env.BUILD_DIR }}
-          echo "=== Preparing kernel ==="
-          # Добавляем -k, чтобы проигнорировать потенциальные ошибки при компиляции других модулей ядра
-          make -k target/linux/prepare -j4 V=s 2>&1 | tee /tmp/build-kernel-prep.log || true
+          echo "=== Preparing and installing kernel headers/dependencies ==="
+          # Использование -k для пропуска ошибок в других модулях
+          make -k target/linux/prepare V=s 2>&1 | tee /tmp/build-kernel-prep.log || true
+          # Эксплицитная установка, чтобы гарантировать, что Module.symvers и заголовки доступны для kmod-amneziawg
+          make -k target/linux/install -j$(nproc) V=s 2>&1 | tee -a /tmp/build-kernel-prep.log
 
-      - name: Build AmneziaWG packages (Stage 4 - With -k to ignore other module errors)
+      # Скорректированный Stage 4: теперь разделены компиляция и установка для лучшей диагностики
+      - name: Build AmneziaWG packages (Stage 4)
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # Надежный поиск KMOD-пакета
           KMOD_PATH=$(find feeds/amneziawg -maxdepth 1 -type d -name "*kmod*" -o -name "*kernel*" | head -1)
           if [ -n "$KMOD_PATH" ]; then
             KMOD_PKG=$(basename "$KMOD_PATH")
             echo "✅ KMOD Package found: $KMOD_PKG"
           else
             KMOD_PKG=""
-            echo "⚠️ KMOD Package NOT found in feeds/amneziawg. Skipping kmod build."
+            echo "❌ ERROR: KMOD Package NOT found in feeds/amneziawg."
+            exit 1
           fi
-          
-          echo "=== Building amneziawg-tools ==="
-          # Добавляем -k
-          make -k package/feeds/amneziawg/amneziawg-tools/compile -j4 V=s 2>&1 | tee /tmp/build-awg-tools.log || {
-            echo "⚠️ Tools build failed"
-            tail -100 /tmp/build-awg-tools.log
+
+          # 1. Компиляция всех целевых пакетов
+          echo "=== Building all three AmneziaWG targets (Compile stage) ==="
+          # Используем -k для игнорирования ошибок, таких как gpio-button-hotplug
+          make -k package/feeds/amneziawg/amneziawg-tools/compile \
+               package/feeds/amneziawg/$KMOD_PKG/compile \
+               package/feeds/amneziawg/luci-proto-amneziawg/compile -j4 V=s 2>&1 | tee /tmp/build-awg-compile.log || {
+            echo "⚠️ Compilation finished with errors (expected due to -k). Check build-awg-compile.log"
           }
-          
-          if [ -n "$KMOD_PKG" ]; then
-            echo "=== Building kernel module: $KMOD_PKG ==="
-            # Добавляем -k
-            make -k package/feeds/amneziawg/$KMOD_PKG/compile -j4 V=s 2>&1 | tee /tmp/build-awg-kmod.log || {
-              echo "⚠️ Trying single-threaded build..."
-              make -k package/feeds/amneziawg/$KMOD_PKG/compile -j1 V=s 2>&1 | tee -a /tmp/build-awg-kmod.log
-            }
-          fi
-          
-          echo "=== Building luci-proto-amneziawg ==="
-          # Добавляем -k
-          make -k package/feeds/amneziawg/luci-proto-amneziawg/compile -j4 V=s 2>&1 | tee /tmp/build-awg-luci.log || {
-            echo "⚠️ LuCI build failed"
-            tail -100 /tmp/build-awg-luci.log
+
+          # 2. Установка (создание IPK) для amneziawg-tools
+          echo "=== Installing amneziawg-tools (IPK creation) ==="
+          make package/feeds/amneziawg/amneziawg-tools/install -j1 V=s || true
+
+          # 3. Установка (создание IPK) для kmod-amneziawg
+          echo "=== Installing kernel module: $KMOD_PKG (IPK creation) ==="
+          # Однопоточная установка с логом для лучшей диагностики
+          make package/feeds/amneziawg/$KMOD_PKG/install -j1 V=s 2>&1 | tee /tmp/build-awg-kmod-install.log || {
+            echo "❌ Kmod install failed. Check build-awg-kmod-install.log"
           }
-          
-          echo "=== Installing packages ==="
-          # Добавляем -k
-          make -k package/install -j4 V=s || true
-          
+
+          # 4. Установка (создание IPK) для luci-proto-amneziawg
+          echo "=== Installing luci-proto-amneziawg (IPK creation) ==="
+          make package/feeds/amneziawg/luci-proto-amneziawg/install -j1 V=s || true
+
           echo "=== Creating package index ==="
-          # Добавляем -k
-          make -k package/index V=s 2>&1 | grep -v "usign" || true
+          make package/index V=s 2>&1 | grep -v "usign" || true
 
       - name: Collect artifacts
         if: always()
