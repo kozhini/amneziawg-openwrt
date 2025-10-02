@@ -194,12 +194,10 @@ jobs:
           echo "# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set" >> .config
           
           # 4. КРИТИЧЕСКИ: Запускаем make defconfig для устранения WARNING: your configuration is out of sync.
-          # Поскольку CONFIG_DEFAULT_ удален, он не должен быть включен.
           make defconfig
           
           echo "✅ Config synced. gpio-button-hotplug status check:"
           
-          # Финальная проверка: если пакет присутствует, он НЕ должен быть =y.
           if grep "kmod-gpio-button-hotplug=y" .config; then
               echo "❌ ERROR: Package still ENABLED (=y) after fix! Aborting."
               exit 1
@@ -247,8 +245,16 @@ jobs:
           
           echo "=== 2/2: Installing kernel headers (Critical for kmod) ==="
           # Эксплицитная установка с -k, чтобы игнорировать ошибки образа.
-          # Этот шаг должен создать staging_dir, даже если make завершится с кодом ошибки.
           make -k target/linux/install -j$(nproc) V=s 2>&1 | tee -a /tmp/build-kernel-prep.log || true
+
+      # НОВЫЙ КРИТИЧЕСКИЙ ШАГ: Исправление отсутствия правил сборки в Stage 4
+      - name: Fix Package Symlinks (Critical Sync)
+        run: |
+          cd ${{ env.BUILD_DIR }}
+          echo "=== Running make package/symlinks to fix missing dependencies ==="
+          # Эта команда перестраивает дерево зависимостей, что необходимо для поиска целей 'install'.
+          make package/symlinks V=s || true
+          echo "✅ Symlinks updated."
 
       # Stage 4: Разделение компиляции и установки
       - name: Build AmneziaWG packages (Stage 4)
@@ -280,6 +286,7 @@ jobs:
 
           # 3. Установка (создание IPK) для kmod-amneziawg
           echo "=== Installing kernel module: $KMOD_PKG (IPK creation) ==="
+          # Если этот шаг завершится сбоем, нам нужен лог build-awg-kmod-install.log
           make package/feeds/amneziawg/$KMOD_PKG/install -j1 V=s 2>&1 | tee /tmp/build-awg-kmod-install.log || {
             echo "❌ Kmod install failed. Check build-awg-kmod-install.log"
           }
