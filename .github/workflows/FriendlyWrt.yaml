@@ -177,12 +177,12 @@ jobs:
           echo "=== Initial config check ==="
           grep -E "(amneziawg|CRYPTO|gpio-button-hotplug)" .config | head -20
 
-      # ОКОНЧАТЕЛЬНЫЙ ФИКС: Удаляем проблемный CONFIG_DEFAULT_ и ПРЕКРАЩАЕМ запускать make defconfig
+      # ОКОНЧАТЕЛЬНЫЙ ФИКС: Удаляем CONFIG_DEFAULT_ и СИНХРОНИЗИРУЕМ через oldconfig
       - name: Disable problematic package and sync config
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== Explicitly disabling gpio-button-hotplug (NO final defconfig) ==="
+          echo "=== Explicitly disabling gpio-button-hotplug and syncing config (using oldconfig) ==="
           
           # 1. Удаляем строку CONFIG_DEFAULT_
           sed -i '/CONFIG_DEFAULT_kmod-gpio-button-hotplug/d' .config
@@ -193,7 +193,8 @@ jobs:
           # 3. Добавляем заглушку "# is not set"
           echo "# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set" >> .config
           
-          # ❌ КРИТИЧЕСКИ: УДАЛЕНА КОМАНДА make defconfig, чтобы избежать восстановления пакета
+          # 4. СИНХРОНИЗАЦИЯ: make oldconfig должен устранить WARNING и создать правила, не восстанавливая сломанный пакет.
+          make oldconfig
           
           echo "✅ Config cleanup complete. gpio-button-hotplug status check:"
           
@@ -246,16 +247,7 @@ jobs:
           # Эксплицитная установка с -k, чтобы игнорировать ошибки образа.
           make -k target/linux/install -j$(nproc) V=s 2>&1 | tee -a /tmp/build-kernel-prep.log || true
 
-      # КРИТИЧЕСКИЙ ШАГ: Исправление отсутствия правил сборки
-      - name: Fix Package Symlinks and Index (Critical Sync)
-        run: |
-          cd ${{ env.BUILD_DIR }}
-          echo "=== Running make package/symlinks and package/index to fix missing dependencies ==="
-          # 1. Сначала восстанавливаем дерево зависимостей
-          make package/symlinks V=s || true
-          # 2. Затем принудительно создаем индекс пакетов, который восстанавливает правила 'install'
-          make package/index V=s || true
-          echo "✅ Symlinks and index updated."
+      # Шаг синхронизации удален, т.к. make oldconfig должен его заменить.
 
       # Stage 4: Разделение компиляции и установки
       - name: Build AmneziaWG packages (Stage 4)
@@ -294,8 +286,6 @@ jobs:
           # 4. Установка (создание IPK) для luci-proto-amneziawg
           echo "=== Installing luci-proto-amneziawg (IPK creation) ==="
           make package/feeds/amneziawg/luci-proto-amneziawg/install -j1 V=s || true
-
-          # УБРАНА ПОВТОРНАЯ КОМАНДА make package/index
           
       - name: Collect artifacts
         if: always()
