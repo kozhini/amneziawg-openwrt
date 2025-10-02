@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       friendlywrt_version:
-        description: "FriendlyWrt version"
+        description: "FriendlyWrt version (e.g., 24.10)"
         type: choice
         required: true
         default: "24.10"
@@ -11,7 +11,7 @@ on:
           - "23.05"
           - "24.10"
       amneziawg_version:
-        description: "AmneziaWG version"
+        description: "AmneziaWG version (branch/tag/commit)"
         type: string
         required: true
         default: "master"
@@ -171,7 +171,7 @@ jobs:
           CONFIG_CRYPTO_CURVE25519=y
           EOF
           
-          # 3. Перезапускаем make defconfig для обработки наших добавлений
+          # 3. Перезапускаем make defconfig для обработки наших добавлений (это нормально)
           make defconfig
           
           echo "=== Initial config check ==="
@@ -193,7 +193,7 @@ jobs:
           # 3. Добавляем заглушку "# is not set"
           echo "# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set" >> .config
           
-          # ❌ КРИТИЧЕСКИ: УДАЛЕНА КОМАНДА make defconfig
+          # ❌ КРИТИЧЕСКИ: УДАЛЕНА КОМАНДА make defconfig, чтобы избежать восстановления пакета
           
           echo "✅ Config cleanup complete. gpio-button-hotplug status check:"
           
@@ -251,6 +251,7 @@ jobs:
         run: |
           cd ${{ env.BUILD_DIR }}
           echo "=== Running make package/symlinks to fix missing dependencies ==="
+          # Устраняет ошибку "WARNING: your configuration is out of sync."
           make package/symlinks V=s || true
           echo "✅ Symlinks updated."
 
