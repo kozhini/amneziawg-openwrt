@@ -40,7 +40,7 @@ jobs:
         run: |
           release_tag="AmneziaWG-FriendlyWrt-${{ inputs.friendlywrt_version }}-$(date +%Y%m%d-%H%M)"
           echo "release_tag=$release_tag" >> $GITHUB_OUTPUT
-      
+          
       - name: Create draft release
         uses: softprops/action-gh-release@v2
         env:
@@ -59,7 +59,7 @@ jobs:
       matrix:
         target_cpu: ${{ inputs.target_cpu && fromJson(format('["{0}"]', inputs.target_cpu)) || fromJson('["rk3328","rk3399","rk3566","rk3568","rk3588"]') }}
       fail-fast: false
-    
+      
     env:
       TERM: xterm
       FORCE_UNSAFE_CONFIGURE: 1
@@ -150,8 +150,6 @@ jobs:
           echo "=== Installing feeds ==="
           ./scripts/feeds install -a
           
-# ... (предыдущие шаги)
-
       - name: Configure build
         run: |
           cd ${{ env.BUILD_DIR }}
@@ -179,36 +177,36 @@ jobs:
           echo "=== Initial config check ==="
           grep -E "(amneziawg|CRYPTO|gpio-button-hotplug)" .config | head -20
 
-      # ОКОНЧАТЕЛЬНЫЙ ФИКС
-      - name: Disable problematic package (FINAL ATTEMPT)
+      # ОКОНЧАТЕЛЬНЫЙ ФИКС: Удаляем проблемный CONFIG_DEFAULT_, чтобы make defconfig не вернул его.
+      - name: Disable problematic package and sync config
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== Explicitly disabling gpio-button-hotplug to fix kernel build ==="
+          echo "=== Explicitly disabling gpio-button-hotplug and syncing config ==="
           
-          # 1. Инвертируем CONFIG_PACKAGE_ на n, чтобы отключить его
-          sed -i 's/CONFIG_PACKAGE_kmod-gpio-button-hotplug=y/CONFIG_PACKAGE_kmod-gpio-button-hotplug=n/' .config
-          
-          # 2. Удаляем строку CONFIG_DEFAULT_ (чтобы defconfig не восстановил ее)
+          # 1. Удаляем строку CONFIG_DEFAULT_ (чтобы defconfig не восстановил ее)
           sed -i '/CONFIG_DEFAULT_kmod-gpio-button-hotplug/d' .config
           
-          # 3. Добавляем заглушку, чтобы defconfig не восстанавливал ее принудительно
+          # 2. Удаляем строку CONFIG_PACKAGE_
+          sed -i '/CONFIG_PACKAGE_kmod-gpio-button-hotplug/d' .config
+          
+          # 3. Добавляем заглушку "# is not set"
           echo "# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set" >> .config
           
-          # !!! МЫ НЕ ЗАПУСКАЕМ make defconfig !!!
-          # Это критический шаг: мы полагаемся на то, что make в Stage 2 и 4 использует этот измененный .config
+          # 4. КРИТИЧЕСКИ: Запускаем make defconfig для устранения WARNING: your configuration is out of sync.
+          # Поскольку CONFIG_DEFAULT_ удален, он не должен быть включен.
+          make defconfig
           
-          echo "✅ gpio-button-hotplug explicitly disabled."
+          echo "✅ Config synced. gpio-button-hotplug status check:"
           
-          # Финальная проверка: должны увидеть =n или отсутствие строки, но не =y
+          # Финальная проверка: если пакет присутствует, он НЕ должен быть =y.
           if grep "kmod-gpio-button-hotplug=y" .config; then
-              echo "❌ ERROR: Package still ENABLED (=y) after fix! This must be investigated in the build environment."
+              echo "❌ ERROR: Package still ENABLED (=y) after fix! Aborting."
               exit 1
           else
               echo "✅ Final check passed: gpio-button-hotplug is NOT enabled (=y)."
               grep "gpio-button-hotplug" .config || echo "✅ Package settings successfully removed/disabled."
           fi
-          
           
       - name: Download packages
         run: |
@@ -217,8 +215,6 @@ jobs:
           make download -j8 V=s || make download -j1 V=s
           find dl -size -1024c -exec rm -f {} \;
           
-# ... (предыдущие шаги без изменений)
-
       - name: Build toolchain (Stage 1 - Critical)
         id: build_toolchain
         continue-on-error: true
@@ -246,20 +242,20 @@ jobs:
           cd ${{ env.BUILD_DIR }}
           
           echo "=== 1/2: Preparing kernel (Compiling) ==="
-          # Сначала компилируем все. Используем -k для пропуска ошибок в других модулях
+          # Компиляция с -k
           make -k target/linux/prepare -j4 V=s 2>&1 | tee /tmp/build-kernel-prep.log || true
           
           echo "=== 2/2: Installing kernel headers (Critical for kmod) ==="
-          # Эксплицитная установка с -k, чтобы игнорировать ошибки, связанные с 'image'
-          # Ошибки, которые вы видели (target/linux/rockchip/image), часто не критичны для сборки kmod
+          # Эксплицитная установка с -k, чтобы игнорировать ошибки образа.
+          # Этот шаг должен создать staging_dir, даже если make завершится с кодом ошибки.
           make -k target/linux/install -j$(nproc) V=s 2>&1 | tee -a /tmp/build-kernel-prep.log || true
 
-      # Stage 4: Разделение компиляции и установки остается в силе
+      # Stage 4: Разделение компиляции и установки
       - name: Build AmneziaWG packages (Stage 4)
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # ... (логика поиска KMOD_PKG без изменений)
+          # Поиск имени пакета ядра (например, kmod-amneziawg или kmod-amneziawg-kernel)
           KMOD_PATH=$(find feeds/amneziawg -maxdepth 1 -type d -name "*kmod*" -o -name "*kernel*" | head -1)
           if [ -n "$KMOD_PATH" ]; then
             KMOD_PKG=$(basename "$KMOD_PATH")
@@ -295,7 +291,6 @@ jobs:
           echo "=== Creating package index ==="
           make package/index V=s 2>&1 | grep -v "usign" || true
           
-      # ... (последующие шаги без изменений)
       - name: Collect artifacts
         if: always()
         shell: bash
@@ -338,15 +333,15 @@ jobs:
           Installation Instructions:
           ==========================
           1. Upload .ipk files to your router:
-             scp *.ipk root@YOUR_ROUTER_IP:/tmp/
+              scp *.ipk root@YOUR_ROUTER_IP:/tmp/
           2. SSH to router and install:
-             ssh root@YOUR_ROUTER_IP
-             cd /tmp
-             opkg install kmod-amneziawg*.ipk
-             opkg install amneziawg-tools*.ipk
-             opkg install luci-proto-amneziawg*.ipk
+              ssh root@YOUR_ROUTER_IP
+              cd /tmp
+              opkg install kmod-amneziawg*.ipk
+              opkg install amneziawg-tools*.ipk
+              opkg install luci-proto-amneziawg*.ipk
           3. Reboot:
-             reboot
+              reboot
 
           Logs:
           =====
