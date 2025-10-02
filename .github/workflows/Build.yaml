@@ -124,7 +124,7 @@ jobs:
             echo "Warning: directory $pkg_dir not found"
           fi
         }
-        update_pkg "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "feature/awg2"
+        update_pkg "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master"
         update_pkg "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master"
         cd - >/dev/null
 
