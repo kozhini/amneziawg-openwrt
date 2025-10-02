@@ -171,7 +171,7 @@ jobs:
           CONFIG_CRYPTO_CURVE25519=y
           EOF
           
-          # 3. Перезапускаем make defconfig для обработки наших добавлений (это нормально)
+          # 3. Перезапускаем make defconfig для обработки наших добавлений
           make defconfig
           
           echo "=== Initial config check ==="
@@ -247,13 +247,15 @@ jobs:
           make -k target/linux/install -j$(nproc) V=s 2>&1 | tee -a /tmp/build-kernel-prep.log || true
 
       # КРИТИЧЕСКИЙ ШАГ: Исправление отсутствия правил сборки
-      - name: Fix Package Symlinks (Critical Sync)
+      - name: Fix Package Symlinks and Index (Critical Sync)
         run: |
           cd ${{ env.BUILD_DIR }}
-          echo "=== Running make package/symlinks to fix missing dependencies ==="
-          # Устраняет ошибку "WARNING: your configuration is out of sync."
+          echo "=== Running make package/symlinks and package/index to fix missing dependencies ==="
+          # 1. Сначала восстанавливаем дерево зависимостей
           make package/symlinks V=s || true
-          echo "✅ Symlinks updated."
+          # 2. Затем принудительно создаем индекс пакетов, который восстанавливает правила 'install'
+          make package/index V=s || true
+          echo "✅ Symlinks and index updated."
 
       # Stage 4: Разделение компиляции и установки
       - name: Build AmneziaWG packages (Stage 4)
@@ -293,8 +295,7 @@ jobs:
           echo "=== Installing luci-proto-amneziawg (IPK creation) ==="
           make package/feeds/amneziawg/luci-proto-amneziawg/install -j1 V=s || true
 
-          echo "=== Creating package index ==="
-          make package/index V=s 2>&1 | grep -v "usign" || true
+          # УБРАНА ПОВТОРНАЯ КОМАНДА make package/index
           
       - name: Collect artifacts
         if: always()
