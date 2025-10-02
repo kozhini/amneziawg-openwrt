@@ -150,6 +150,8 @@ jobs:
           echo "=== Installing feeds ==="
           ./scripts/feeds install -a
           
+# ... (предыдущие шаги до Download packages)
+
       - name: Configure build
         run: |
           cd ${{ env.BUILD_DIR }}
@@ -171,42 +173,36 @@ jobs:
           
           make defconfig
           
-          echo "=== Final config check ==="
-          grep -E "(amneziawg|CRYPTO)" .config | head -20
+          echo "=== Final config check (before fix) ==="
+          grep -E "(amneziawg|CRYPTO|gpio-button-hotplug)" .config | head -20
 
-      # НОВЫЙ КРИТИЧЕСКИ ВАЖНЫЙ ШАГ
+      # КОРРЕКТНЫЙ ШАГ ИСКЛЮЧЕНИЯ
       - name: Disable problematic package
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== Disabling gpio-button-hotplug to fix kernel build ==="
+          echo "=== Explicitly disabling gpio-button-hotplug to fix kernel build ==="
           
-          # Используем scripts/config для явного отключения пакета.
-          # Флаг '-d' (disable) более надежен, чем sed.
+          # 1. Инвертируем CONFIG_PACKAGE_ на n, чтобы отключить его
+          sed -i 's/CONFIG_PACKAGE_kmod-gpio-button-hotplug=y/CONFIG_PACKAGE_kmod-gpio-button-hotplug=n/' .config
           
-          # Отключаем CONFIG_PACKAGE_
-          ./scripts/config --file .config -d CONFIG_PACKAGE_gpio_button_hotplug
-          ./scripts/config --file .config -d CONFIG_PACKAGE_kmod_gpio_button_hotplug
+          # 2. Удаляем строку CONFIG_DEFAULT_, которая заставляет его включаться в defconfig
+          sed -i '/CONFIG_DEFAULT_kmod-gpio-button-hotplug/d' .config
           
-          # Отключаем CONFIG_DEFAULT_ (чтобы make defconfig не добавил его снова)
-          ./scripts/config --file .config -d CONFIG_DEFAULT_gpio_button_hotplug
-          ./scripts/config --file .config -d CONFIG_DEFAULT_kmod_gpio_button_hotplug
-          
-          # Запускаем defconfig для финализации изменений и удаления зависимостей
+          # 3. Запускаем defconfig для финализации изменений (теперь он не должен вернуть пакет)
           make defconfig
           
           echo "✅ gpio-button-hotplug explicitly disabled."
-          # Проверка: если пакет присутствует, он должен быть отключен (=n).
-          if grep "gpio-button-hotplug" .config; then
-              if grep "gpio-button-hotplug=n" .config; then
-                  echo "✅ Package successfully disabled (=n)."
-              else
-                  echo "❌ ERROR: Package still enabled!"
-                  exit 1
-              fi
+          
+          # Финальная проверка: должны увидеть =n или отсутствие строки
+          if grep "gpio-button-hotplug=y" .config; then
+              echo "❌ ERROR: Package still ENABLED (=y) after fix!"
+              exit 1
           else
-              echo "✅ Package successfully removed from .config"
+              echo "✅ Final check passed: gpio-button-hotplug is NOT enabled (=y)."
+              grep "gpio-button-hotplug" .config || true
           fi
+          
           
       - name: Download packages
         run: |
