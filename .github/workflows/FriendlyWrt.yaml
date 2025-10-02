@@ -177,33 +177,33 @@ jobs:
           echo "=== Initial config check ==="
           grep -E "(amneziawg|CRYPTO|gpio-button-hotplug)" .config | head -20
 
-      # ОКОНЧАТЕЛЬНЫЙ ФИКС: Удаляем CONFIG_DEFAULT_ и СИНХРОНИЗИРУЕМ через oldconfig
-      - name: Disable problematic package and sync config
+      # ОКОНЧАТЕЛЬНЫЙ ФИКС: Двойной удар: Sync через oldconfig, затем Brute Force Remove
+      - name: Disable problematic package, Sync, and Force Remove (Brute Force)
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== Explicitly disabling gpio-button-hotplug and syncing config (using oldconfig) ==="
-          
-          # 1. Удаляем строку CONFIG_DEFAULT_
+          echo "=== 1/3. Initial disable (before oldconfig) ==="
+          # Исходное удаление (будет отменено oldconfig)
           sed -i '/CONFIG_DEFAULT_kmod-gpio-button-hotplug/d' .config
-          
-          # 2. Удаляем строку CONFIG_PACKAGE_
           sed -i '/CONFIG_PACKAGE_kmod-gpio-button-hotplug/d' .config
-          
-          # 3. Добавляем заглушку "# is not set"
           echo "# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set" >> .config
           
-          # 4. СИНХРОНИЗАЦИЯ: make oldconfig должен устранить WARNING и создать правила, не восстанавливая сломанный пакет.
+          echo "=== 2/3. Synchronizing config using oldconfig (Fixes 'No rule', restores package) ==="
+          # CRITICAL: Fixes the 'No rule to make target' error
           make oldconfig
           
-          echo "✅ Config cleanup complete. gpio-button-hotplug status check:"
+          echo "=== 3/3. FINAL BRUTE FORCE REMOVAL (Last action on .config) ==="
+          # FINAL BLOW: Удаляем строку снова, чтобы она отсутствовала при запуске make
+          sed -i '/CONFIG_DEFAULT_kmod-gpio-button-hotplug/d' .config
+          sed -i '/CONFIG_PACKAGE_kmod-gpio-button-hotplug/d' .config
+          
+          echo "✅ Config sync complete. Final check:"
           
           if grep "kmod-gpio-button-hotplug=y" .config; then
-              echo "❌ ERROR: Package still ENABLED (=y) after fix! Aborting."
+              echo "❌ ERROR: Package still ENABLED (=y)! Aborting."
               exit 1
           else
               echo "✅ Final check passed: gpio-button-hotplug is NOT enabled (=y)."
-              grep "gpio-button-hotplug" .config || echo "✅ Package settings successfully removed/disabled."
           fi
           
       - name: Download packages
@@ -247,8 +247,6 @@ jobs:
           # Эксплицитная установка с -k, чтобы игнорировать ошибки образа.
           make -k target/linux/install -j$(nproc) V=s 2>&1 | tee -a /tmp/build-kernel-prep.log || true
 
-      # Шаг синхронизации удален, т.к. make oldconfig должен его заменить.
-
       # Stage 4: Разделение компиляции и установки
       - name: Build AmneziaWG packages (Stage 4)
         run: |
@@ -263,7 +261,7 @@ jobs:
             KMOD_PKG=""
             echo "❌ ERROR: KMOD Package NOT found in feeds/amneziawg."
             exit 1
-          fi
+          fij
 
           # 1. Компиляция всех целевых пакетов
           echo "=== Building all three AmneziaWG targets (Compile stage) ==="
