@@ -150,14 +150,16 @@ jobs:
           echo "=== Installing feeds ==="
           ./scripts/feeds install -a
           
-# ... (предыдущие шаги до Download packages)
+# ... (предыдущие шаги)
 
       - name: Configure build
         run: |
           cd ${{ env.BUILD_DIR }}
           
+          # 1. Запускаем defconfig один раз, чтобы получить базу
           make defconfig
           
+          # 2. Добавляем наши пакеты
           cat >> .config << 'EOF'
           CONFIG_TARGET_rockchip=y
           CONFIG_TARGET_rockchip_armv8=y
@@ -166,18 +168,19 @@ jobs:
           CONFIG_PACKAGE_luci-proto-amneziawg=m
           # Настройки криптографии ядра, необходимые для kmod-amneziawg
           CONFIG_CRYPTO_CHACHA20=y
-          CONFIG_CRYPTO_POLY1305=y
           CONFIG_CRYPTO_CHACHA20POLY1305=y
+          CONFIG_CRYPTO_POLY1305=y
           CONFIG_CRYPTO_CURVE25519=y
           EOF
           
+          # 3. Перезапускаем make defconfig для обработки наших добавлений
           make defconfig
           
-          echo "=== Final config check (before fix) ==="
+          echo "=== Initial config check ==="
           grep -E "(amneziawg|CRYPTO|gpio-button-hotplug)" .config | head -20
 
-      # КОРРЕКТНЫЙ ШАГ ИСКЛЮЧЕНИЯ
-      - name: Disable problematic package
+      # ОКОНЧАТЕЛЬНЫЙ ФИКС
+      - name: Disable problematic package (FINAL ATTEMPT)
         run: |
           cd ${{ env.BUILD_DIR }}
           
@@ -186,21 +189,24 @@ jobs:
           # 1. Инвертируем CONFIG_PACKAGE_ на n, чтобы отключить его
           sed -i 's/CONFIG_PACKAGE_kmod-gpio-button-hotplug=y/CONFIG_PACKAGE_kmod-gpio-button-hotplug=n/' .config
           
-          # 2. Удаляем строку CONFIG_DEFAULT_, которая заставляет его включаться в defconfig
+          # 2. Удаляем строку CONFIG_DEFAULT_ (чтобы defconfig не восстановил ее)
           sed -i '/CONFIG_DEFAULT_kmod-gpio-button-hotplug/d' .config
           
-          # 3. Запускаем defconfig для финализации изменений (теперь он не должен вернуть пакет)
-          make defconfig
+          # 3. Добавляем заглушку, чтобы defconfig не восстанавливал ее принудительно
+          echo "# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set" >> .config
+          
+          # !!! МЫ НЕ ЗАПУСКАЕМ make defconfig !!!
+          # Это критический шаг: мы полагаемся на то, что make в Stage 2 и 4 использует этот измененный .config
           
           echo "✅ gpio-button-hotplug explicitly disabled."
           
-          # Финальная проверка: должны увидеть =n или отсутствие строки
-          if grep "gpio-button-hotplug=y" .config; then
-              echo "❌ ERROR: Package still ENABLED (=y) after fix!"
+          # Финальная проверка: должны увидеть =n или отсутствие строки, но не =y
+          if grep "kmod-gpio-button-hotplug=y" .config; then
+              echo "❌ ERROR: Package still ENABLED (=y) after fix! This must be investigated in the build environment."
               exit 1
           else
               echo "✅ Final check passed: gpio-button-hotplug is NOT enabled (=y)."
-              grep "gpio-button-hotplug" .config || true
+              grep "gpio-button-hotplug" .config || echo "✅ Package settings successfully removed/disabled."
           fi
           
           
