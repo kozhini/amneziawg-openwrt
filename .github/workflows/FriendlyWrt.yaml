@@ -1,9 +1,9 @@
-name: Build AmneziaWG for FriendlyWrt (Stable Build)
+name: Build AmneziaWG for FriendlyWrt (Fixed)
 on:
   workflow_dispatch:
     inputs:
       friendlywrt_version:
-        description: "FriendlyWrt version (e.g., 24.10)"
+        description: "FriendlyWrt version"
         type: choice
         required: true
         default: "24.10"
@@ -11,7 +11,7 @@ on:
           - "23.05"
           - "24.10"
       amneziawg_version:
-        description: "AmneziaWG version (branch/tag/commit)"
+        description: "AmneziaWG version"
         type: string
         required: true
         default: "master"
@@ -54,7 +54,7 @@ jobs:
   build_amneziawg:
     needs: prepare_release
     runs-on: ubuntu-22.04
-    timeout-minutes: 360  # 6 hours max
+    timeout-minutes: 360
     strategy:
       matrix:
         target_cpu: ${{ inputs.target_cpu && fromJson(format('["{0}"]', inputs.target_cpu)) || fromJson('["rk3328","rk3399","rk3566","rk3568","rk3588"]') }}
@@ -66,6 +66,17 @@ jobs:
       BUILD_DIR: friendlywrt-project/friendlywrt
       
     steps:
+      - name: Maximize build space
+        run: |
+          echo "=== Initial disk space ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo apt-get clean
+          echo "=== After cleanup ==="
+          df -h
+
       - name: Checkout repositories
         uses: actions/checkout@v5
         with:
@@ -89,6 +100,7 @@ jobs:
             rsync unzip zlib1g-dev file wget curl qemu-utils \
             python3-setuptools python3-dev swig libelf-dev \
             python3-pyelftools python3-pip
+          
           python3 -c "import elftools" || sudo pip3 install pyelftools
           echo "=== Verifying Python3 elftools ==="
           python3 -c "import elftools; print('✅ elftools version:', elftools.__version__)"
@@ -107,15 +119,8 @@ jobs:
           BRANCH="master-v${{ inputs.friendlywrt_version }}"
           MANIFEST="${{ matrix.target_cpu }}.xml"
           
-          echo "=== Verifying manifest exists ==="
-          if wget -q --spider "https://raw.githubusercontent.com/friendlyarm/friendlywrt_manifests/$BRANCH/$MANIFEST"; then
-            echo "✅ Manifest file exists: $MANIFEST"
-          else
-            echo "❌ ERROR: Manifest not found!"
-            exit 1
-          fi
+          echo "=== Using manifest: $BRANCH/$MANIFEST ==="
           
-          echo "=== Initializing repo ==="
           repo init --depth=1 \
             -u https://github.com/friendlyarm/friendlywrt_manifests \
             -b $BRANCH \
@@ -124,166 +129,129 @@ jobs:
             --no-clone-bundle
             
           echo "=== Syncing source ==="
-          repo sync -c --no-clone-bundle -j4 || {
-            echo "⚠️ Parallel sync failed, trying sequential..."
-            repo sync -c --no-clone-bundle
-          }
+          repo sync -c --no-clone-bundle -j4 || repo sync -c --no-clone-bundle
+          
+          echo "=== Verifying structure ==="
+          ls -la | grep -E "friendlywrt|kernel|toolchain"
           
       - name: Setup AmneziaWG feed
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # ИСПРАВЛЕНИЕ: Используем src-cpy для надежного копирования фида
           echo "src-cpy amneziawg ../../amneziawg-openwrt" >> feeds.conf.default
           
-          echo "=== Updating feeds (with retries) ==="
+          echo "=== Updating feeds ==="
           for i in {1..3}; do
-            if ./scripts/feeds update -a; then
-              echo "✅ Feeds updated"
-              break
-            else
-              echo "⚠️ Attempt $i failed, retrying in 10s..."
-              sleep 10
-            fi
+            ./scripts/feeds update -a && break
+            echo "⚠️ Retry $i in 10s..."
+            sleep 10
           done
           
-          echo "=== Installing feeds ==="
           ./scripts/feeds install -a
           
       - name: Configure build
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # 1. Запускаем defconfig один раз, чтобы получить базу
           make defconfig
           
-          # 2. Добавляем наши пакеты
           cat >> .config << 'EOF'
           CONFIG_TARGET_rockchip=y
           CONFIG_TARGET_rockchip_armv8=y
           CONFIG_PACKAGE_kmod-amneziawg=m
           CONFIG_PACKAGE_amneziawg-tools=m
           CONFIG_PACKAGE_luci-proto-amneziawg=m
-          # Настройки криптографии ядра, необходимые для kmod-amneziawg
           CONFIG_CRYPTO_CHACHA20=y
           CONFIG_CRYPTO_CHACHA20POLY1305=y
           CONFIG_CRYPTO_POLY1305=y
           CONFIG_CRYPTO_CURVE25519=y
           EOF
           
-          # 3. Перезапускаем make defconfig для обработки наших добавлений
           make defconfig
-          
-          echo "=== Initial config check ==="
-          grep -E "(amneziawg|CRYPTO|gpio-button-hotplug)" .config | head -20
 
-      # ОКОНЧАТЕЛЬНЫЙ ФИКС: Двойной удар: Sync через oldconfig, затем Brute Force Remove
-      - name: Disable problematic package, Sync, and Force Remove (Brute Force)
+      - name: Disable gpio-button-hotplug (fix build conflict)
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== 1/3. Initial disable (before oldconfig) ==="
-          # Исходное удаление (будет отменено oldconfig)
           sed -i '/CONFIG_DEFAULT_kmod-gpio-button-hotplug/d' .config
           sed -i '/CONFIG_PACKAGE_kmod-gpio-button-hotplug/d' .config
           echo "# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set" >> .config
           
-          echo "=== 2/3. Synchronizing config using oldconfig (Fixes 'No rule', restores package) ==="
-          # CRITICAL: Fixes the 'No rule to make target' error
           make oldconfig
           
-          echo "=== 3/3. FINAL BRUTE FORCE REMOVAL (Last action on .config) ==="
-          # FINAL BLOW: Удаляем строку снова, чтобы она отсутствовала при запуске make
+          # Финальное удаление после oldconfig
           sed -i '/CONFIG_DEFAULT_kmod-gpio-button-hotplug/d' .config
           sed -i '/CONFIG_PACKAGE_kmod-gpio-button-hotplug/d' .config
           
-          echo "✅ Config sync complete. Final check:"
-          
-          if grep "kmod-gpio-button-hotplug=y" .config; then
-              echo "❌ ERROR: Package still ENABLED (=y)! Aborting."
-              exit 1
-          else
-              echo "✅ Final check passed: gpio-button-hotplug is NOT enabled (=y)."
+          if grep -q "kmod-gpio-button-hotplug=y" .config; then
+            echo "❌ Package still enabled!"
+            exit 1
           fi
           
       - name: Download packages
         run: |
           cd ${{ env.BUILD_DIR }}
-          echo "=== Downloading packages ==="
           make download -j8 V=s || make download -j1 V=s
           find dl -size -1024c -exec rm -f {} \;
           
-      - name: Build toolchain (Stage 1 - Critical)
+      - name: Build toolchain
         id: build_toolchain
-        continue-on-error: true
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== Building toolchain (critical stage) ==="
-          make toolchain/install -j2 V=s 2>&1 | tee /tmp/build-toolchain.log || {
-            echo "❌ Toolchain build failed"
-            tail -200 /tmp/build-toolchain.log
+          echo "=== Building toolchain ==="
+          make toolchain/install -j2 V=s 2>&1 | tee /tmp/build-toolchain.log
+          
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "❌ Toolchain failed"
+            tail -100 /tmp/build-toolchain.log
             exit 1
-          }
-          echo "✅ Toolchain built successfully"
+          fi
 
-      - name: Build Host Tools (Stage 1.5 - FIX opkg)
+      - name: Build host tools
         run: |
           cd ${{ env.BUILD_DIR }}
-          echo "=== Building tools (opkg) ==="
-          make -k tools/install -j$(nproc) V=s || true
-          echo "✅ Host tools prepared."
+          make tools/install -j4 V=s 2>&1 | tee /tmp/build-tools.log || true
 
-      # Скорректированный Stage 2: Установка ядра с игнорированием ошибок
-      - name: Build and Install Kernel and Headers (Stage 2)
+      - name: Build and install kernel
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          echo "=== 1/2: Preparing kernel (Compiling) ==="
-          # Компиляция с -k
-          make -k target/linux/prepare -j4 V=s 2>&1 | tee /tmp/build-kernel-prep.log || true
+          echo "=== Preparing kernel ==="
+          make target/linux/prepare -j4 V=s 2>&1 | tee /tmp/build-kernel.log || true
           
-          echo "=== 2/2: Installing kernel headers (Critical for kmod) ==="
-          # Эксплицитная установка с -k, чтобы игнорировать ошибки образа.
-          make -k target/linux/install -j$(nproc) V=s 2>&1 | tee -a /tmp/build-kernel-prep.log || true
-
-      # Stage 4: Разделение компиляции и установки
-      - name: Build AmneziaWG packages (Stage 4)
+          echo "=== Installing kernel headers ==="
+          make target/linux/install -j4 V=s 2>&1 | tee -a /tmp/build-kernel.log || true
+          
+      - name: Build AmneziaWG packages
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # Поиск имени пакета ядра (например, kmod-amneziawg или kmod-amneziawg-kernel)
-          KMOD_PATH=$(find feeds/amneziawg -maxdepth 1 -type d -name "*kmod*" -o -name "*kernel*" | head -1)
-          if [ -n "$KMOD_PATH" ]; then
-            KMOD_PKG=$(basename "$KMOD_PATH")
-            echo "✅ KMOD Package found: $KMOD_PKG"
-          else
-            KMOD_PKG=""
-            echo "❌ ERROR: KMOD Package NOT found in feeds/amneziawg."
+          KMOD_PATH=$(find feeds/amneziawg -maxdepth 1 -type d \( -name "*kmod*" -o -name "*kernel*" \) | head -1)
+          
+          if [ -z "$KMOD_PATH" ]; then
+            echo "❌ Kernel module not found!"
             exit 1
-          fi # <--- ИСПРАВЛЕНО: 'fi' вместо 'fij'
-
-          # 1. Компиляция всех целевых пакетов
-          echo "=== Building all three AmneziaWG targets (Compile stage) ==="
-          make -k package/feeds/amneziawg/amneziawg-tools/compile \
+          fi
+          
+          KMOD_PKG=$(basename "$KMOD_PATH")
+          echo "✅ Building: $KMOD_PKG"
+          
+          # Компиляция
+          echo "=== Compiling packages ==="
+          make package/feeds/amneziawg/amneziawg-tools/compile \
                package/feeds/amneziawg/$KMOD_PKG/compile \
-               package/feeds/amneziawg/luci-proto-amneziawg/compile -j4 V=s 2>&1 | tee /tmp/build-awg-compile.log || {
-            echo "⚠️ Compilation finished with errors (expected due to -k). Check build-awg-compile.log"
-          }
-
-          # 2. Установка (создание IPK) для amneziawg-tools
-          echo "=== Installing amneziawg-tools (IPK creation) ==="
-          make package/feeds/amneziawg/amneziawg-tools/install -j1 V=s || true
-
-          # 3. Установка (создание IPK) для kmod-amneziawg
-          echo "=== Installing kernel module: $KMOD_PKG (IPK creation) ==="
-          make package/feeds/amneziawg/$KMOD_PKG/install -j1 V=s 2>&1 | tee /tmp/build-awg-kmod-install.log || {
-            echo "❌ Kmod install failed. Check build-awg-kmod-install.log"
-          }
-
-          # 4. Установка (создание IPK) для luci-proto-amneziawg
-          echo "=== Installing luci-proto-amneziawg (IPK creation) ==="
-          make package/feeds/amneziawg/luci-proto-amneziawg/install -j1 V=s || true
+               package/feeds/amneziawg/luci-proto-amneziawg/compile \
+               -j4 V=s 2>&1 | tee /tmp/build-compile.log || true
+          
+          # Установка (создание IPK)
+          echo "=== Creating IPK packages ==="
+          make package/feeds/amneziawg/amneziawg-tools/install V=s || true
+          make package/feeds/amneziawg/$KMOD_PKG/install V=s 2>&1 | tee /tmp/build-kmod-install.log || true
+          make package/feeds/amneziawg/luci-proto-amneziawg/install V=s || true
+          
+          # Индекс пакетов
+          make package/index V=s 2>&1 | grep -v "usign" || true
           
       - name: Collect artifacts
         if: always()
