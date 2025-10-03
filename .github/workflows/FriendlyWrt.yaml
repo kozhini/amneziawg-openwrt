@@ -261,7 +261,7 @@ jobs:
             KMOD_PKG=""
             echo "❌ ERROR: KMOD Package NOT found in feeds/amneziawg."
             exit 1
-          fij
+          fi # <--- ИСПРАВЛЕНО: 'fi' вместо 'fij'
 
           # 1. Компиляция всех целевых пакетов
           echo "=== Building all three AmneziaWG targets (Compile stage) ==="
