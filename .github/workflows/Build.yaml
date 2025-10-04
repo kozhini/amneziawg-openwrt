@@ -106,7 +106,18 @@ jobs:
           rm -rf feeds/packages/net/nginx
           rm -rf feeds/packages/net/gensio
           rm -rf feeds/packages/net/etebase
+          rm -rf feeds/packages/utils/fwupd
           rm -rf feeds/luci/applications/luci-app-nginx
+          
+          # Патчим busybox config для удаления PAM зависимости
+          if [ -f "feeds/base/package/utils/busybox/config/Config.in" ]; then
+            sed -i '/config BUSYBOX_CONFIG_PAM/,/depends on PACKAGE_busybox/d' feeds/base/package/utils/busybox/config/Config.in
+          fi
+          
+          # Патчим base-files для удаления busybox-selinux зависимости  
+          if [ -f "package/base-files/Makefile" ]; then
+            sed -i '/select PACKAGE_busybox-selinux/d' package/base-files/Makefile
+          fi
           
           # Пересоздаём индексы feeds
           ./scripts/feeds update -i
