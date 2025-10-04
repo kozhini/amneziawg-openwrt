@@ -57,22 +57,18 @@ jobs:
         set -e -x
         sudo apt-get update
         sudo apt-get install -y python3-pyelftools python3-dev python3-setuptools swig
-
     - name: Download and prepare SDK
       run: |
         set -e -x
-        # Нормализация версии для SNAPSHOT (case-insensitive)
-        VERSION_NORMALIZED=$(echo "${{ inputs.openwrt_version }}" | tr '[:lower:]' '[:upper:]')
-        
         if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
-          if [ "$VERSION_NORMALIZED" = "SNAPSHOT" ]; then
+          if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
             base_url="https://downloads.openwrt.org/snapshots/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
           else
             base_url="https://downloads.openwrt.org/releases/${{ inputs.openwrt_version }}/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
           fi
           sdk_pattern="openwrt-sdk"
         else
-          if [ "$VERSION_NORMALIZED" = "SNAPSHOT" ]; then
+          if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
             base_url="https://downloads.immortalwrt.org/snapshots/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
           else
             base_url="https://downloads.immortalwrt.org/releases/${{ inputs.openwrt_version }}/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
@@ -92,11 +88,8 @@ jobs:
         
         rm -f *.tar.*
         mv *"${sdk_pattern}"* openwrt
-
         echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
         ./openwrt/scripts/feeds update -a
-        
-        # Используем config.buildinfo для всех версий
         curl -fsL "$base_url/config.buildinfo" > openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> openwrt/.config
@@ -104,12 +97,8 @@ jobs:
         echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_amneziawg-tools=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> openwrt/.config
-        
         ./openwrt/scripts/feeds install -a
-        
-        # Запускаем defconfig с игнорированием ошибок
-        make -C openwrt defconfig || echo "defconfig completed with warnings"
-
+        make -C openwrt defconfig
     - name: Update Makefiles latest commits
       run: |
         set -e -x
@@ -135,7 +124,6 @@ jobs:
         update_pkg "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master"
         update_pkg "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master"
         cd - >/dev/null
-
     - name: Compile AmneziaWG packages
       run: |
         set -e -x
@@ -143,7 +131,6 @@ jobs:
         make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
         make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j $(nproc)
         make package/amneziawg-tools/{clean,download,prepare,compile} -j $(nproc)
-
     - name: Prepare artifacts
       id: prepare_artifacts
       run: |
@@ -151,7 +138,6 @@ jobs:
         mkdir awgrelease
         find "openwrt/bin/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/packages" -maxdepth 1 -type f -name 'kmod-amneziawg*' -exec cp {} awgrelease \;
         find "openwrt/bin/packages/${{ inputs.openwrt_arch }}/awgopenwrt" -maxdepth 1 -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} awgrelease \;
-
     - name: Get current date for release notes
       id: get_date
       run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
@@ -164,7 +150,6 @@ jobs:
         name: 'AmneziaWG ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }} for ${{ inputs.openwrt_arch }}'
         body: |
           Automatic build of AmneziaWG packages for OpenWrt/ImmortalWrt.
-
           **Build Date:** ${{ steps.get_date.outputs.date }}
           **Firmware:** ${{ inputs.firmware_type }}
           **OpenWrt/ImmortalWrt Version:** ${{ inputs.openwrt_version }}
