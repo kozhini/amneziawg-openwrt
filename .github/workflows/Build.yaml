@@ -109,25 +109,16 @@ jobs:
           rm -rf feeds/packages/utils/fwupd
           rm -rf feeds/luci/applications/luci-app-nginx
           
-          # Патчим busybox config для удаления PAM зависимости
-          if [ -f "feeds/base/package/utils/busybox/config/Config.in" ]; then
-            sed -i '/config BUSYBOX_CONFIG_PAM/,/depends on PACKAGE_busybox/d' feeds/base/package/utils/busybox/config/Config.in
-          fi
-          
-          # Патчим base-files для удаления busybox-selinux зависимости  
-          if [ -f "package/base-files/Makefile" ]; then
-            sed -i '/select PACKAGE_busybox-selinux/d' package/base-files/Makefile
-          fi
-          
           # Пересоздаём индексы feeds
           ./scripts/feeds update -i
           
-          cd ..
-          
-          # Создаём минимальную конфигурацию
-          cat > openwrt/.config << 'EOF'
+          # Создаём конфигурацию ДО feeds install
+          cat > .config << 'EOF'
         CONFIG_DEVEL=y
         CONFIG_TOOLCHAINOPTS=y
+        # Явно отключаем проблемные опции
+        # CONFIG_PACKAGE_busybox-selinux is not set
+        # CONFIG_BUSYBOX_CONFIG_PAM is not set
         CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
         CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
         CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
@@ -135,6 +126,11 @@ jobs:
         CONFIG_PACKAGE_amneziawg-tools=m
         CONFIG_PACKAGE_luci-proto-amneziawg=m
         EOF
+          
+          cd ..
+          
+          # Устанавливаем feeds ПОСЛЕ создания конфигурации
+          ./openwrt/scripts/feeds install -a
         else
           # Для стабильных версий используем config.buildinfo
           curl -fsL "$base_url/config.buildinfo" > openwrt/.config
@@ -144,9 +140,10 @@ jobs:
           echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> openwrt/.config
           echo "CONFIG_PACKAGE_amneziawg-tools=m" >> openwrt/.config
           echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> openwrt/.config
+          
+          ./openwrt/scripts/feeds install -a
         fi
         
-        ./openwrt/scripts/feeds install -a
         make -C openwrt defconfig
 
     - name: Update Makefiles latest commits
