@@ -92,14 +92,55 @@ jobs:
 
         echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
         ./openwrt/scripts/feeds update -a
-        curl -fsL "$base_url/config.buildinfo" > openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> openwrt/.config
-        echo "CONFIG_PACKAGE_amneziawg-tools=m" >> openwrt/.config
-        echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> openwrt/.config
+        
+        # Для SNAPSHOT версий используем минимальную конфигурацию
+        if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+          # Создаём минимальную базовую конфигурацию
+          cat > openwrt/.config << 'EOF'
+        CONFIG_TARGET_${{ inputs.openwrt_target }}=y
+        CONFIG_TARGET_${{ inputs.openwrt_target }}_${{ inputs.openwrt_subtarget }}=y
+        CONFIG_DEVEL=y
+        CONFIG_TOOLCHAINOPTS=y
+        CONFIG_BUSYBOX_CUSTOM=y
+        CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
+        CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
+        CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
+        CONFIG_PACKAGE_kmod-amneziawg=m
+        CONFIG_PACKAGE_amneziawg-tools=m
+        CONFIG_PACKAGE_luci-proto-amneziawg=m
+        EOF
+        else
+          # Для стабильных версий используем стандартный подход
+          curl -fsL "$base_url/config.buildinfo" > openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> openwrt/.config
+          echo "CONFIG_PACKAGE_amneziawg-tools=m" >> openwrt/.config
+          echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> openwrt/.config
+        fi
+        
         ./openwrt/scripts/feeds install -a
+        
+        # Дополнительная очистка конфигурации для SNAPSHOT
+        if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+          cd openwrt
+          # Отключаем проблемные пакеты с циклическими зависимостями
+          {
+            echo "# CONFIG_PACKAGE_netatalk-full is not set"
+            echo "# CONFIG_PACKAGE_ariang-nginx is not set"
+            echo "# CONFIG_PACKAGE_nginx-mod-lua is not set"
+            echo "# CONFIG_PACKAGE_nginx-mod-stream is not set"
+            echo "# CONFIG_PACKAGE_nginx-mod-ubus is not set"
+            echo "# CONFIG_PACKAGE_nginx-mod-luci is not set"
+            echo "# CONFIG_PACKAGE_etebase is not set"
+            echo "# CONFIG_PACKAGE_busybox-selinux is not set"
+            echo "# CONFIG_PACKAGE_gensio-bin is not set"
+            echo "# CONFIG_BUSYBOX_CONFIG_PAM is not set"
+          } >> .config
+          cd ..
+        fi
+        
         make -C openwrt defconfig
 
     - name: Update Makefiles latest commits
