@@ -61,15 +61,18 @@ jobs:
     - name: Download and prepare SDK
       run: |
         set -e -x
+        # Нормализация версии для SNAPSHOT (case-insensitive)
+        VERSION_NORMALIZED=$(echo "${{ inputs.openwrt_version }}" | tr '[:lower:]' '[:upper:]')
+        
         if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
-          if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+          if [ "$VERSION_NORMALIZED" = "SNAPSHOT" ]; then
             base_url="https://downloads.openwrt.org/snapshots/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
           else
             base_url="https://downloads.openwrt.org/releases/${{ inputs.openwrt_version }}/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
           fi
           sdk_pattern="openwrt-sdk"
         else
-          if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+          if [ "$VERSION_NORMALIZED" = "SNAPSHOT" ]; then
             base_url="https://downloads.immortalwrt.org/snapshots/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
           else
             base_url="https://downloads.immortalwrt.org/releases/${{ inputs.openwrt_version }}/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
@@ -94,7 +97,7 @@ jobs:
         ./openwrt/scripts/feeds update -a
         
         # Для SNAPSHOT версий используем минимальную конфигурацию
-        if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+        if [ "$VERSION_NORMALIZED" = "SNAPSHOT" ]; then
           # Создаём минимальную базовую конфигурацию
           cat > openwrt/.config << 'EOF'
         CONFIG_TARGET_${{ inputs.openwrt_target }}=y
@@ -123,7 +126,7 @@ jobs:
         ./openwrt/scripts/feeds install -a
         
         # Дополнительная очистка конфигурации для SNAPSHOT
-        if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+        if [ "$VERSION_NORMALIZED" = "SNAPSHOT" ]; then
           cd openwrt
           # Отключаем проблемные пакеты с циклическими зависимостями
           {
