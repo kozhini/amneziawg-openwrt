@@ -94,21 +94,27 @@ jobs:
         mv *"${sdk_pattern}"* openwrt
 
         echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
+        ./openwrt/scripts/feeds update -a
         
-        # Для SNAPSHOT версий исключаем проблемные feeds
+        # Для SNAPSHOT патчим проблемные Kconfig файлы
         if [ "$VERSION_NORMALIZED" = "SNAPSHOT" ]; then
           cd openwrt
-          # Удаляем проблемные пакеты из feeds перед обновлением
-          sed -i '/src-git packages/d' feeds.conf.default
-          sed -i '/src-git luci/d' feeds.conf.default
           
-          # Добавляем только базовые feeds
-          echo "src-git base https://git.openwrt.org/openwrt/openwrt.git" >> feeds.conf.default
+          # Удаляем проблемные пакеты из feeds
+          rm -rf feeds/packages/net/netatalk
+          rm -rf feeds/packages/net/ariang-nginx  
+          rm -rf feeds/packages/net/nginx
+          rm -rf feeds/packages/net/gensio
+          rm -rf feeds/packages/net/etebase
+          rm -rf feeds/luci/applications/luci-app-nginx
           
-          ./scripts/feeds update awgopenwrt base
+          # Пересоздаём индексы feeds
+          ./scripts/feeds update -i
           
-          # Минимальная конфигурация без config.buildinfo
-          cat > .config << 'EOF'
+          cd ..
+          
+          # Создаём минимальную конфигурацию
+          cat > openwrt/.config << 'EOF'
         CONFIG_DEVEL=y
         CONFIG_TOOLCHAINOPTS=y
         CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
@@ -118,14 +124,8 @@ jobs:
         CONFIG_PACKAGE_amneziawg-tools=m
         CONFIG_PACKAGE_luci-proto-amneziawg=m
         EOF
-          
-          ./scripts/feeds install kmod-crypto-lib-chacha20 kmod-crypto-lib-chacha20poly1305 kmod-crypto-chacha20poly1305
-          ./scripts/feeds install -a -p awgopenwrt
-          
-          cd ..
         else
-          # Для стабильных версий стандартный процесс
-          ./openwrt/scripts/feeds update -a
+          # Для стабильных версий используем config.buildinfo
           curl -fsL "$base_url/config.buildinfo" > openwrt/.config
           echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> openwrt/.config
           echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> openwrt/.config
@@ -133,9 +133,9 @@ jobs:
           echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> openwrt/.config
           echo "CONFIG_PACKAGE_amneziawg-tools=m" >> openwrt/.config
           echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> openwrt/.config
-          ./openwrt/scripts/feeds install -a
         fi
         
+        ./openwrt/scripts/feeds install -a
         make -C openwrt defconfig
 
     - name: Update Makefiles latest commits
