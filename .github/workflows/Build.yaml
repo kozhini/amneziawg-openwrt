@@ -109,16 +109,34 @@ jobs:
           rm -rf feeds/packages/utils/fwupd
           rm -rf feeds/luci/applications/luci-app-nginx
           
+          # Патчим базовые файлы SDK для удаления циклических зависимостей
+          
+          # 1. Патчим Config-build.in для base-files и busybox-selinux
+          if [ -f "Config-build.in" ]; then
+            # Удаляем строку select PACKAGE_busybox-selinux из PACKAGE_base-files
+            sed -i '/config PACKAGE_base-files/,/^config [A-Z]/ {
+              /select PACKAGE_busybox-selinux/d
+            }' Config-build.in
+            
+            # Комментируем определение PACKAGE_busybox-selinux
+            sed -i 's/^config PACKAGE_busybox-selinux$/# &/' Config-build.in
+          fi
+          
+          # 2. Патчим busybox Config.in для PAM
+          if [ -f "feeds/base/package/utils/busybox/config/Config.in" ]; then
+            # Комментируем весь блок BUSYBOX_CONFIG_PAM
+            sed -i '/^config BUSYBOX_CONFIG_PAM$/,/^$/ {
+              s/^/# /
+            }' feeds/base/package/utils/busybox/config/Config.in
+          fi
+          
           # Пересоздаём индексы feeds
           ./scripts/feeds update -i
           
-          # Создаём конфигурацию ДО feeds install
+          # Создаём конфигурацию
           cat > .config << 'EOF'
         CONFIG_DEVEL=y
         CONFIG_TOOLCHAINOPTS=y
-        # Явно отключаем проблемные опции
-        # CONFIG_PACKAGE_busybox-selinux is not set
-        # CONFIG_BUSYBOX_CONFIG_PAM is not set
         CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
         CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
         CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
@@ -129,7 +147,7 @@ jobs:
           
           cd ..
           
-          # Устанавливаем feeds ПОСЛЕ создания конфигурации
+          # Устанавливаем feeds ПОСЛЕ патчинга
           ./openwrt/scripts/feeds install -a
         else
           # Для стабильных версий используем config.buildinfo
