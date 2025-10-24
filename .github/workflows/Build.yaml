@@ -146,8 +146,8 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: awgrelease/*
-        tag_name: ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }}-${{ inputs.openwrt_arch }}
-        name: 'AmneziaWG ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }} for ${{ inputs.openwrt_arch }}'
+        tag_name: ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }}-${{ inputs.openwrt_arch }}-${{ inputs.openwrt_target }}-${{ inputs.openwrt_subtarget }}
+        name: 'AmneziaWG ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }} for ${{ inputs.openwrt_arch }} (${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }})'
         body: |
           Automatic build of AmneziaWG packages for OpenWrt/ImmortalWrt.
           **Build Date:** ${{ steps.get_date.outputs.date }}
@@ -158,3 +158,4 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
