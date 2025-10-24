@@ -79,8 +79,6 @@ const methods = {
 							public_key: record[2],
 							listen_port: record[3],
 							fwmark: record[4],
-							transfer_rx: 0,
-							transfer_tx: 0,
 							peers: []
 						};
 
