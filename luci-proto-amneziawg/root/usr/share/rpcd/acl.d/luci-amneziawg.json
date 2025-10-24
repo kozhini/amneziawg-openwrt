@@ -15,6 +15,5 @@
 			},
 			"uci": [ "ddns", "system", "network" ]
 		},
-		// ...
 	}
 }
