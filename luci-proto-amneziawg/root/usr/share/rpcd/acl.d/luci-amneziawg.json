@@ -5,15 +5,18 @@
 			"ubus": {
 				"luci.amneziawg": [
 					"getAwgInstances"
-				],
-				"network.interface": [
-					"status"
-				],
-				"network.device": [
-					"status"
 				]
 			},
 			"uci": [ "ddns", "system", "network" ]
 		},
+		"write": {
+			"ubus": {
+				"luci.amneziawg": [
+					"generateKeyPair",
+					"getPublicAndPrivateKeyFromPrivate",
+					"generatePsk"
+				]
+			}
+		}
 	}
 }
