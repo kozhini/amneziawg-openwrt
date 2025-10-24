@@ -15,7 +15,7 @@ on:
         description: "OpenWrt/ImmortalWrt version"
         type: string
         required: true
-        default: "24.10.3"
+        default: "24.10.4"
       amneziawg_version:
         description: "AmneziaWG version"
         type: string
