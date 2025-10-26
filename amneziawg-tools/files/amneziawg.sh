@@ -50,13 +50,9 @@ proto_amneziawg_is_kernel_mode() {
 		if [ -e /sys/module/amneziawg ]; then
 			return 0
 		else
-			if ! command -v "${WG_QUICK_USERSPACE_IMPLEMENTATION:-amneziawg-go}" >/dev/null; then
-				ret=$?
-				echo "Please install either kernel module (kmod-amneziawg package) or user-space implementation in /usr/bin/amneziawg-go."
-				exit $ret
-			else
-				return 1
-			fi
+			echo "Error: AmneziaWG kernel module (kmod-amneziawg) is required but not available."
+			echo "Please install the kmod-amneziawg package."
+			exit 1
 		fi
 	else
 		return 0
@@ -220,15 +216,15 @@ proto_amneziawg_setup() {
 	config_get awg_i4 "${config}" "awg_i4"
 	config_get awg_i5 "${config}" "awg_i5"
 
-	if proto_amneziawg_is_kernel_mode; then
-		logger -t "amneziawg" "info: using kernel-space kmod-amneziawg for ${AWG}"
-		ip link del dev "${config}" 2>/dev/null
-		ip link add dev "${config}" type amneziawg
-	else
-		logger -t "amneziawg" "info: using user-space amneziawg-go for ${AWG}"
-		rm -f "/var/run/amneziawg/${config}.sock"
-		amneziawg-go "${config}"
+	# Check if kernel module is available
+	if ! proto_amneziawg_is_kernel_mode; then
+		logger -t "amneziawg" "error: kernel module not available"
+		exit 1
 	fi
+
+	logger -t "amneziawg" "info: using kernel-space kmod-amneziawg for ${AWG}"
+	ip link del dev "${config}" 2>/dev/null
+	ip link add dev "${config}" type amneziawg
 
 	if [ "${mtu}" ]; then
 		ip link set mtu "${mtu}" dev "${config}"
@@ -346,11 +342,8 @@ proto_amneziawg_setup() {
 
 proto_amneziawg_teardown() {
 	local config="$1"
-	if proto_amneziawg_is_kernel_mode; then
-		ip link del dev "${config}" >/dev/null 2>&1
-	else
-		rm -f "/var/run/amneziawg/${config}.sock"
-	fi
+	# Always use kernel mode - remove interface
+	ip link del dev "${config}" >/dev/null 2>&1
 }
 
 [ -n "$INCLUDE_ONLY" ] || {
