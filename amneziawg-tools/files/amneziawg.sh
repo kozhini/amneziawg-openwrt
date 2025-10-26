@@ -50,9 +50,9 @@ proto_amneziawg_is_kernel_mode() {
 		if [ -e /sys/module/amneziawg ]; then
 			return 0
 		else
-			echo "Error: AmneziaWG kernel module (kmod-amneziawg) is required but not available."
-			echo "Please install the kmod-amneziawg package."
-			exit 1
+			logger -t "amneziawg" "error: AmneziaWG kernel module (kmod-amneziawg) is required but not available"
+			logger -t "amneziawg" "error: Please install the kmod-amneziawg package"
+			return 1
 		fi
 	else
 		return 0
@@ -86,7 +86,7 @@ proto_amneziawg_setup_peer() {
 	fi
 
 	if [ -z "$public_key" ]; then
-		echo "Skipping peer config $peer_config because public key is not defined."
+		logger -t "amneziawg" "warning: skipping peer config $peer_config because public key is not defined"
 		return 0
 	fi
 
@@ -148,8 +148,12 @@ ensure_key_is_generated() {
 		umask 077
 		ucitmp="$(mktemp -d)"
 		private_key="$("${AWG}" genkey)"
-		uci -q -t "$ucitmp" set network."$1".private_key="$private_key" && \
-			uci -q -t "$ucitmp" commit network
+		if [ -n "$private_key" ]; then
+			uci -q -t "$ucitmp" set network."$1".private_key="$private_key" && \
+				uci -q -t "$ucitmp" commit network
+		else
+			logger -t "amneziawg" "error: failed to generate private key for $1"
+		fi
 		rm -rf "$ucitmp"
 		umask "$oldmask"
 	fi
