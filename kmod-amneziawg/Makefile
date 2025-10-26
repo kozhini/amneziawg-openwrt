@@ -26,10 +26,14 @@ define KernelPackage/amneziawg
 	DEPENDS:= \
 		+kmod-udptunnel4 \
 		+kmod-udptunnel6 \
+		+kmod-crypto-aead \
+		+kmod-crypto-manager \
+		+kmod-crypto-kpp \
 		+kmod-crypto-lib-chacha20poly1305 \
 		+kmod-crypto-lib-curve25519
 	CONFLICTS:=kmod-wireguard
 	PROVIDES:=kmod-wireguard
+	AUTOLOAD:=$(call AutoProbe,amneziawg)
 endef
 
 define Build/Prepare
