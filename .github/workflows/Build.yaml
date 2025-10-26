@@ -94,6 +94,9 @@ jobs:
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> openwrt/.config
+        echo "CONFIG_PACKAGE_kmod-crypto-aead=m" >> .config
+        echo "CONFIG_PACKAGE_kmod-crypto-manager=m" >> .config
+        echo "CONFIG_PACKAGE_kmod-crypto-kpp=m" >> .config
         echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_amneziawg-tools=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> openwrt/.config
