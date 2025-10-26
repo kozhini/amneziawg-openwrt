@@ -27,6 +27,7 @@ define Package/amneziawg-tools
   MAINTAINER:=Amnezia Admin <admin@amnezia.org>
   TITLE:=AmneziaWG userspace control program (awg)
   DEPENDS:= \
+	  +kmod-amneziawg \
 	  +@BUSYBOX_CONFIG_IP \
 	  +@BUSYBOX_CONFIG_FEATURE_IP_LINK
 endef
