@@ -4,12 +4,12 @@
 # Copyright (C) 2018 Aleksandr V. Piskunov <aleksandr.v.piskunov@gmail.com>.
 # Copyright (C) 2015-2018 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
 #
-# This watchdog script tries to re-resolve hostnames for inactive WireGuard peers.
+# This watchdog script tries to re-resolve hostnames for inactive AmneziaWG peers.
 # Use it for peers with a frequently changing dynamic IP.
 # persistent_keepalive must be set, recommended value is 25 seconds.
 #
 # Run this script from cron every minute:
-# echo '* * * * * /usr/bin/wireguard_watchdog' >> /etc/crontabs/root
+# echo '* * * * * /usr/bin/amneziawg_watchdog' >> /etc/crontabs/root
 
 # shellcheck disable=SC1091,SC3043
 
@@ -60,10 +60,10 @@ check_peer_activity() {
   awg set "${iface}" peer "${public_key}" endpoint "${endpoint_host}:${endpoint_port}"
 }
 
-# query ubus for all active wireguard interfaces
+# query ubus for all active amneziawg interfaces
 awg_ifaces=$(ubus -S call network.interface dump | jsonfilter -e '@.interface[@.up=true]' | jsonfilter -a -e '@[@.proto="amneziawg"].interface' | tr "\n" " ")
 
-# check every peer in every active wireguard interface
+# check every peer in every active amneziawg interface
 config_load network
 for iface in $awg_ifaces; do
   config_foreach check_peer_activity "amneziawg_${iface}" "${iface}"
