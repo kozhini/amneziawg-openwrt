@@ -155,6 +155,7 @@ ensure_key_is_generated() {
 	fi
 }
 
+
 proto_amneziawg_setup() {
 	local config="$1"
 	local awg_dir="/tmp/amneziawg"
