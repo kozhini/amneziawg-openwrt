@@ -32,7 +32,6 @@ define KernelPackage/amneziawg
 		+kmod-crypto-lib-chacha20poly1305 \
 		+kmod-crypto-lib-curve25519
 	CONFLICTS:=kmod-wireguard
-	PROVIDES:=kmod-wireguard
 	AUTOLOAD:=$(call AutoProbe,amneziawg)
 endef
 
