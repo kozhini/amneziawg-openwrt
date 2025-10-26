@@ -28,6 +28,8 @@ define KernelPackage/amneziawg
 		+kmod-udptunnel6 \
 		+kmod-crypto-lib-chacha20poly1305 \
 		+kmod-crypto-lib-curve25519
+	CONFLICTS:=kmod-wireguard
+	PROVIDES:=kmod-wireguard
 endef
 
 define Build/Prepare
