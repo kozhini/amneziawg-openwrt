@@ -7,7 +7,7 @@ LUCI_DEPENDS:= \
 	+amneziawg-tools \
 	+kmod-amneziawg \
 	+ucode \
-	+luci-lib-uqr \
+	+qrencode \
 	+resolveip \
 	+@BUSYBOX_CONFIG_IP \
 	+@BUSYBOX_CONFIG_FEATURE_IP_LINK
