@@ -31,7 +31,6 @@ define Package/amneziawg-tools
 	  +@BUSYBOX_CONFIG_IP \
 	  +@BUSYBOX_CONFIG_FEATURE_IP_LINK
   CONFLICTS:=wireguard-tools
-  PROVIDES:=wireguard-tools
 endef
 
 define Package/amneziawg-tools/description
