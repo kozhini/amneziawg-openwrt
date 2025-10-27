@@ -799,8 +799,8 @@ return network.registerProtocol('amneziawg', {
 			    keep = this.section.formvalue(section_id, 'persistent_keepalive');
 
 			// If endpoint is IPv6 we must escape it with []
-			if ((endpoint.match(/:/g) || []).length > 1) {
-				endpoint = '[' + endpoint + ']';
+			if (endpoint && (endpoint.match(/:/g) || []).length > 1) {
+    			endpoint = '[' + endpoint + ']';
 			}
 
 			return [
