@@ -57,6 +57,7 @@ jobs:
         set -e -x
         sudo apt-get update
         sudo apt-get install -y python3-pyelftools python3-dev python3-setuptools swig
+        
     - name: Download and prepare SDK
       run: |
         set -e -x
@@ -126,7 +127,7 @@ jobs:
           fi
         }
         update_pkg "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master"
-        update_pkg "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "feature/awg4"
+        update_pkg "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master"
         cd - >/dev/null
         
     - name: Compile AmneziaWG packages
