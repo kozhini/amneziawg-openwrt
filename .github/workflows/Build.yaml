@@ -81,7 +81,7 @@ jobs:
           echo "SDK file not found."
           exit 1
         fi
-        curl -fsLO "$base_url$sdk_url"
+        curl -fsLO "$base_url$sdk_url" || exit 1
         file_name=$(basename "$sdk_url")
         
         tar -xf "$file_name"
@@ -94,9 +94,9 @@ jobs:
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-aead=m" >> .config
-        echo "CONFIG_PACKAGE_kmod-crypto-manager=m" >> .config
-        echo "CONFIG_PACKAGE_kmod-crypto-kpp=m" >> .config
+        echo "CONFIG_PACKAGE_kmod-crypto-aead=m" >> openwrt/.config
+        echo "CONFIG_PACKAGE_kmod-crypto-manager=m" >> openwrt/.config
+        echo "CONFIG_PACKAGE_kmod-crypto-kpp=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_amneziawg-tools=m" >> openwrt/.config
         echo "CONFIG_PACKAGE_luci-proto-amneziawg=m" >> openwrt/.config
