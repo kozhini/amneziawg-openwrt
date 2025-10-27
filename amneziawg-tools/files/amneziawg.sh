@@ -159,46 +159,6 @@ ensure_key_is_generated() {
 	fi
 }
 
-proto_amneziawg_update_stats() {
-	local config="$1"
-	
-	while true; do
-		sleep 5
-		
-		# Проверяем существование интерфейса
-		[ -d "/sys/class/net/${config}" ] || break
-		
-		# Получаем статистику из awg
-		local rx_total=0
-		local tx_total=0
-		
-		# Парсим вывод awg show dump
-		local dump_output
-		dump_output=$(${AWG} show "${config}" dump 2>/dev/null)
-		
-		if [ -n "$dump_output" ]; then
-			# Пропускаем первую строку (заголовок интерфейса)
-			# Суммируем статистику всех пиров (начиная со второй строки)
-			echo "$dump_output" | tail -n +2 | while IFS=$'\t' read -r pubkey preshared endpoint allowed_ips latest_handshake rx tx keepalive; do
-				if [ -n "$rx" ] && [ "$rx" != "0" ]; then
-					rx_total=$((rx_total + rx))
-				fi
-				if [ -n "$tx" ] && [ "$tx" != "0" ]; then
-					tx_total=$((tx_total + tx))
-				fi
-				
-				# Обновляем счётчики (требует sysfs доступ)
-				if [ -w "/sys/class/net/${config}/statistics/rx_bytes" ]; then
-					echo "$rx_total" > "/sys/class/net/${config}/statistics/rx_bytes" 2>/dev/null || true
-				fi
-				if [ -w "/sys/class/net/${config}/statistics/tx_bytes" ]; then
-					echo "$tx_total" > "/sys/class/net/${config}/statistics/tx_bytes" 2>/dev/null || true
-				fi
-			done
-		fi
-	done
-}
-
 proto_amneziawg_setup() {
 	local config="$1"
 	local awg_dir="/tmp/amneziawg"
@@ -382,27 +342,13 @@ proto_amneziawg_setup() {
 	fi
 
 	proto_send_update "${config}"
-	
-	# Запускаем фоновое обновление статистики
-	proto_amneziawg_update_stats "${config}" &
-	echo $! > "/var/run/amneziawg-${config}.pid"
 }
 
 proto_amneziawg_teardown() {
 	local config="$1"
 	
-	# Останавливаем фоновый процесс обновления статистики
-	if [ -f "/var/run/amneziawg-${config}.pid" ]; then
-		local pid
-		pid=$(cat "/var/run/amneziawg-${config}.pid" 2>/dev/null)
-		if [ -n "$pid" ]; then
-			kill "$pid" 2>/dev/null || true
-		fi
-		rm -f "/var/run/amneziawg-${config}.pid"
-	fi
-	
-	# Удаляем интерфейс
-	ip link del dev "${config}" >/dev/null 2>&1
+	# Удаляем интерфейс (ядро само обновит статистику)
+	ip link del dev "${config}" >/dev/null 2>&1 || true
 }
 
 [ -n "$INCLUDE_ONLY" ] || {
