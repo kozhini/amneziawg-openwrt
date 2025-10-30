@@ -6,4 +6,4 @@ Do not forget to reboot router after packages installation
 
 Check settings by following instruction
 
-https://github.com/openwrt-xiaomi/awg-openwrt/wiki/AmneziaWG-installing#networkinterfaces
+[https://github.com/openwrt-xiaomi/awg-openwrt/wiki/AmneziaWG-installing#networkinterfaces](https://github.com/openwrt-xiaomi/awg-openwrt/wiki/AmneziaWG-installing#networkinterfaces)
