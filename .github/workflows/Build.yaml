@@ -61,15 +61,18 @@ jobs:
     - name: Download and prepare SDK
       run: |
         set -e -x
+        # Преобразуем версию в нижний регистр для сравнения
+        version_lower=$(echo "${{ inputs.openwrt_version }}" | tr '[:upper:]' '[:lower:]')
+        
         if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
-          if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+          if [ "$version_lower" = "snapshot" ]; then
             base_url="https://downloads.openwrt.org/snapshots/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
           else
             base_url="https://downloads.openwrt.org/releases/${{ inputs.openwrt_version }}/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
           fi
           sdk_pattern="openwrt-sdk"
         else
-          if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+          if [ "$version_lower" = "snapshot" ]; then
             base_url="https://downloads.immortalwrt.org/snapshots/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
           else
             base_url="https://downloads.immortalwrt.org/releases/${{ inputs.openwrt_version }}/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
