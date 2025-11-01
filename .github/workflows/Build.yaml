@@ -146,8 +146,24 @@ jobs:
       run: |
         set -e -x
         cd openwrt
-        make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
+        
+        # Запускаем с подробным выводом для диагностики
+        echo "=== Building kmod-amneziawg ==="
+        make -j1 V=s package/kmod-amneziawg/download 2>&1 | tee kmod-download.log || {
+          echo "Failed to download kmod-amneziawg sources"
+          echo "=== Download log ==="
+          cat kmod-download.log
+          echo "=== Checking Makefile ==="
+          cat package/feeds/awgopenwrt/kmod-amneziawg/Makefile || echo "Makefile not found"
+          exit 1
+        }
+        
+        make package/kmod-amneziawg/{clean,prepare,compile} -j $(nproc)
+        
+        echo "=== Building amneziawg-tools ==="
         make package/amneziawg-tools/{clean,download,prepare,compile} -j $(nproc)
+        
+        echo "=== Building luci-proto-amneziawg ==="
         make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j $(nproc)
 
     - name: Prepare artifacts
