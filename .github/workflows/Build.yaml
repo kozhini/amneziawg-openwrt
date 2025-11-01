@@ -116,49 +116,6 @@ jobs:
         ./openwrt/scripts/feeds install -a
         make -C openwrt defconfig
         
-    - name: Update Makefiles latest commits
-      if: ${{ inputs.openwrt_version != 'SNAPSHOT' && inputs.openwrt_version != 'snapshot' }}
-      run: |
-        set -e -x
-        cd openwrt/package/feeds/awgopenwrt
-        
-        update_pkg() {
-          local pkg_dir="$1"
-          local repo="$2"
-          local branch="$3"
-          echo "--- Updating $pkg_dir from $branch ---"
-          
-          if [ ! -d "$pkg_dir" ]; then
-            echo "ERROR: directory $pkg_dir not found!"
-            ls -la
-            return 1
-          fi
-          
-          commit=$(git ls-remote "$repo" "$branch" | awk '{print $1; exit}')
-          if [ -z "$commit" ]; then
-            echo "ERROR: Could not get commit from $repo $branch"
-            return 1
-          fi
-          
-          echo "Latest commit: $commit"
-          
-          cd "$pkg_dir"
-          
-          # Обновляем только PKG_SOURCE_VERSION, оставляем PKG_MIRROR_HASH как есть
-          # OpenWRT пересчитает хеш сам при первой сборке
-          sed -i "s/^PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$commit/" Makefile
-          
-          echo "--- $pkg_dir updated: commit $commit ---"
-          cat Makefile | grep -E "(PKG_SOURCE_VERSION|PKG_MIRROR_HASH)"
-          
-          cd - >/dev/null
-        }
-        
-        update_pkg "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master" || exit 1
-        update_pkg "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master" || exit 1
-        
-        cd - >/dev/null
-        
     - name: Compile AmneziaWG packages
       run: |
         set -e -x
