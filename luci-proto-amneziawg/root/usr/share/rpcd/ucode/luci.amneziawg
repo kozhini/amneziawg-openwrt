@@ -12,8 +12,6 @@ function shellquote(s) {
 }
 
 function command(cmd) {
-	if (!cmd || length(cmd) > 4096)
-		return null;
 	return trim(popen(cmd)?.read?.('all'));
 }
 
