@@ -346,9 +346,11 @@ proto_amneziawg_setup() {
 
 proto_amneziawg_teardown() {
 	local config="$1"
-	
-	# Удаляем интерфейс (ядро само обновит статистику)
-	ip link del dev "${config}" >/dev/null 2>&1 || true
+	if proto_amneziawg_is_kernel_mode; then
+		ip link del dev "${config}" >/dev/null 2>&1
+	else
+		rm -f "/var/run/amneziawg/${config}.sock"
+	fi
 }
 
 [ -n "$INCLUDE_ONLY" ] || {
