@@ -141,25 +141,17 @@ jobs:
           
           echo "Latest commit: $commit"
           
-          # Убираем .git из URL для формирования ссылки на архив
-          repo_url="${repo%.git}"
-          url="$repo_url/archive/$commit.tar.gz"
-          
-          echo "Testing URL: $url"
-          if ! curl -I -f -s "$url" > /dev/null; then
-            echo "ERROR: Cannot access $url"
-            return 1
-          fi
-          
-          hash=$(curl -L --retry 3 -s "$url" | sha256sum | cut -d' ' -f1)
-          echo "Hash: $hash"
-          
           cd "$pkg_dir"
           
+          # Обновляем только PKG_SOURCE_VERSION
           sed -i "s/^PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$commit/" Makefile
-          sed -i "s/^PKG_MIRROR_HASH:=.*/PKG_MIRROR_HASH:=$hash/" Makefile
+          
+          # Для git-репозиториев используем skip для hash
+          # это позволит OpenWRT самому вычислить хеш после клонирования
+          sed -i "s/^PKG_MIRROR_HASH:=.*/PKG_MIRROR_HASH:=skip/" Makefile
           
           echo "--- $pkg_dir updated: commit $commit ---"
+          cat Makefile | grep -E "(PKG_SOURCE_VERSION|PKG_MIRROR_HASH)"
           
           cd - >/dev/null
         }
