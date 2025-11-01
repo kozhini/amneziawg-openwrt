@@ -91,16 +91,41 @@ jobs:
         mv *"${sdk_pattern}"* openwrt
         echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
         ./openwrt/scripts/feeds update -a
-        curl -fsL "$base_url/config.buildinfo" > openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-aead=y" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-manager=y" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-crypto-kpp=y" >> openwrt/.config
-        echo "CONFIG_PACKAGE_kmod-amneziawg=y" >> openwrt/.config
-        echo "CONFIG_PACKAGE_amneziawg-tools=y" >> openwrt/.config
-        echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> openwrt/.config
+        
+        # Для SNAPSHOT используем другой подход к конфигурации
+        if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+          # Создаем минимальную конфигурацию без загрузки config.buildinfo
+          cat > openwrt/.config <<'EOFCONFIG'
+        CONFIG_DEVEL=y
+        CONFIG_TOOLCHAINOPTS=y
+        CONFIG_ALL_KMODS=y
+        CONFIG_ALL_NONSHARED=y
+        CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y
+        CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y
+        CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y
+        CONFIG_PACKAGE_kmod-crypto-aead=y
+        CONFIG_PACKAGE_kmod-crypto-manager=y
+        CONFIG_PACKAGE_kmod-crypto-kpp=y
+        CONFIG_PACKAGE_kmod-udptunnel4=y
+        CONFIG_PACKAGE_kmod-udptunnel6=y
+        CONFIG_PACKAGE_kmod-crypto-lib-curve25519=y
+        CONFIG_PACKAGE_kmod-amneziawg=m
+        CONFIG_PACKAGE_amneziawg-tools=m
+        CONFIG_PACKAGE_luci-proto-amneziawg=m
+        EOFCONFIG
+        else
+          curl -fsL "$base_url/config.buildinfo" > openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-crypto-aead=y" >> openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-crypto-manager=y" >> openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-crypto-kpp=y" >> openwrt/.config
+          echo "CONFIG_PACKAGE_kmod-amneziawg=y" >> openwrt/.config
+          echo "CONFIG_PACKAGE_amneziawg-tools=y" >> openwrt/.config
+          echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> openwrt/.config
+        fi
+        
         ./openwrt/scripts/feeds install -a
         make -C openwrt defconfig
         
@@ -134,9 +159,16 @@ jobs:
       run: |
         set -e -x
         cd openwrt
-        make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
-        make package/amneziawg-tools/{clean,download,prepare,compile} -j $(nproc)
-        make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j $(nproc)
+        # Для SNAPSHOT версий используем более надежный метод сборки
+        if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
+          make -j1 V=s package/kmod-amneziawg/{clean,download,prepare,compile} || exit 1
+          make -j1 V=s package/amneziawg-tools/{clean,download,prepare,compile} || exit 1
+          make -j1 V=s package/luci-proto-amneziawg/{clean,download,prepare,compile} || exit 1
+        else
+          make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
+          make package/amneziawg-tools/{clean,download,prepare,compile} -j $(nproc)
+          make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j $(nproc)
+        fi
 
     - name: Prepare artifacts
       id: prepare_artifacts
@@ -145,6 +177,7 @@ jobs:
         mkdir awgrelease
         find "openwrt/bin/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/packages" -maxdepth 1 -type f -name 'kmod-amneziawg*' -exec cp {} awgrelease \;
         find "openwrt/bin/packages/${{ inputs.openwrt_arch }}/awgopenwrt" -maxdepth 1 -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} awgrelease \;
+        
     - name: Get current date for release notes
       id: get_date
       run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
