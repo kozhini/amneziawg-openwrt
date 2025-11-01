@@ -77,7 +77,8 @@ jobs:
           sdk_pattern="immortalwrt-sdk"
         fi
         
-        sdk_url=$(curl -s "${base_url}" | grep -oP "href=\"${sdk_pattern}[^\"]+\.tar\.[a-z0-9]+\"" | sed -e 's/href="//' -e 's/"$//' | head -n1)
+        # Более гибкий поиск SDK с поддержкой разных форматов архивов
+        sdk_url=$(curl -s "${base_url}" | grep -oP "href=\"${sdk_pattern}[^\"]+\.tar\.(zst|xz|bz2|gz)\"" | sed -e 's/href="//' -e 's/"$//' | head -n1)
         if [[ -z "$sdk_url" ]]; then
           echo "SDK file not found."
           exit 1
@@ -85,46 +86,29 @@ jobs:
         curl -fsLO "$base_url$sdk_url" || exit 1
         file_name=$(basename "$sdk_url")
         
+        # Универсальная распаковка
         tar -xf "$file_name"
         
-        rm -f *.tar.*
+        # Очистка всех возможных форматов архивов
+        rm -f *.tar.* *.tgz
         mv *"${sdk_pattern}"* openwrt
+        
         echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
         ./openwrt/scripts/feeds update -a
         
-        # Для SNAPSHOT используем другой подход к конфигурации
-        if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
-          # Создаем минимальную конфигурацию без загрузки config.buildinfo
-          cat > openwrt/.config <<'EOFCONFIG'
-        CONFIG_DEVEL=y
-        CONFIG_TOOLCHAINOPTS=y
-        CONFIG_ALL_KMODS=y
-        CONFIG_ALL_NONSHARED=y
-        CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y
-        CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y
-        CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y
-        CONFIG_PACKAGE_kmod-crypto-aead=y
-        CONFIG_PACKAGE_kmod-crypto-manager=y
-        CONFIG_PACKAGE_kmod-crypto-kpp=y
-        CONFIG_PACKAGE_kmod-udptunnel4=y
-        CONFIG_PACKAGE_kmod-udptunnel6=y
-        CONFIG_PACKAGE_kmod-crypto-lib-curve25519=y
-        CONFIG_PACKAGE_kmod-amneziawg=m
-        CONFIG_PACKAGE_amneziawg-tools=m
-        CONFIG_PACKAGE_luci-proto-amneziawg=m
-        EOFCONFIG
-        else
-          curl -fsL "$base_url/config.buildinfo" > openwrt/.config
-          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_kmod-crypto-aead=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_kmod-crypto-manager=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_kmod-crypto-kpp=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_kmod-amneziawg=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_amneziawg-tools=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> openwrt/.config
-        fi
+        # Загружаем config.buildinfo для всех версий (включая SNAPSHOT)
+        curl -fsL "$base_url/config.buildinfo" > openwrt/.config
+        
+        # Добавляем необходимые пакеты
+        echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> openwrt/.config
+        echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> openwrt/.config
+        echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> openwrt/.config
+        echo "CONFIG_PACKAGE_kmod-crypto-aead=y" >> openwrt/.config
+        echo "CONFIG_PACKAGE_kmod-crypto-manager=y" >> openwrt/.config
+        echo "CONFIG_PACKAGE_kmod-crypto-kpp=y" >> openwrt/.config
+        echo "CONFIG_PACKAGE_kmod-amneziawg=y" >> openwrt/.config
+        echo "CONFIG_PACKAGE_amneziawg-tools=y" >> openwrt/.config
+        echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> openwrt/.config
         
         ./openwrt/scripts/feeds install -a
         make -C openwrt defconfig
@@ -159,16 +143,9 @@ jobs:
       run: |
         set -e -x
         cd openwrt
-        # Для SNAPSHOT версий используем более надежный метод сборки
-        if [ "${{ inputs.openwrt_version }}" = "SNAPSHOT" ]; then
-          make -j1 V=s package/kmod-amneziawg/{clean,download,prepare,compile} || exit 1
-          make -j1 V=s package/amneziawg-tools/{clean,download,prepare,compile} || exit 1
-          make -j1 V=s package/luci-proto-amneziawg/{clean,download,prepare,compile} || exit 1
-        else
-          make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
-          make package/amneziawg-tools/{clean,download,prepare,compile} -j $(nproc)
-          make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j $(nproc)
-        fi
+        make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
+        make package/amneziawg-tools/{clean,download,prepare,compile} -j $(nproc)
+        make package/luci-proto-amneziawg/{clean,download,prepare,compile} -j $(nproc)
 
     - name: Prepare artifacts
       id: prepare_artifacts
