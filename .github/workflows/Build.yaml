@@ -140,7 +140,10 @@ jobs:
           fi
           
           echo "Latest commit: $commit"
-          url="$repo/archive/$commit.tar.gz"
+          
+          # Убираем .git из URL для формирования ссылки на архив
+          repo_url="${repo%.git}"
+          url="$repo_url/archive/$commit.tar.gz"
           
           echo "Testing URL: $url"
           if ! curl -I -f -s "$url" > /dev/null; then
@@ -152,17 +155,13 @@ jobs:
           echo "Hash: $hash"
           
           cd "$pkg_dir"
-          echo "=== Original Makefile ==="
-          cat Makefile
           
           sed -i "s/^PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$commit/" Makefile
           sed -i "s/^PKG_MIRROR_HASH:=.*/PKG_MIRROR_HASH:=$hash/" Makefile
           
-          echo "=== Updated Makefile ==="
-          cat Makefile
+          echo "--- $pkg_dir updated: commit $commit ---"
           
           cd - >/dev/null
-          echo "--- $pkg_dir updated successfully ---"
         }
         
         update_pkg "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master" || exit 1
