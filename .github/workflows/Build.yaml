@@ -16,11 +16,6 @@ on:
         type: string
         required: true
         default: "24.10.4"
-      amneziawg_version:
-        description: "AmneziaWG version (Git ref or 'master' for latest)"
-        type: string
-        required: true
-        default: "master"
       openwrt_arch:
         description: "Architecture"
         type: string
@@ -50,7 +45,8 @@ jobs:
       uses: actions/checkout@v5
       with:
         path: amneziawg
-        ref: ${{ inputs.amneziawg_version }}
+        # Используем main/master, так как конкретная версия больше не передается через input
+        ref: main
         fetch-depth: 0
 
     - name: Install additional packages
@@ -116,8 +112,9 @@ jobs:
         ./openwrt/scripts/feeds install -a
         make -C openwrt defconfig
 
-    - name: Update Makefiles for 'master' (SNAPSHOT) version
-      if: ${{ inputs.amneziawg_version == 'master' }}
+    - name: Update Makefiles for SNAPSHOT
+      # Запускаем только если выбрана SNAPSHOT-версия OpenWrt/ImmortalWrt
+      if: contains(inputs.openwrt_version, 'snapshot') || contains(inputs.openwrt_version, 'SNAPSHOT')
       run: |
         set -e -x
         cd openwrt/package/feeds/awgopenwrt
@@ -134,7 +131,6 @@ jobs:
             sed -i "s/^PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$commit/" Makefile
             # Удаляем PKG_MIRROR_HASH для принудительного перерасчета
             sed -i "/^PKG_MIRROR_HASH:=/d" Makefile
-            # Добавляем пустой хеш, чтобы make check мог его заполнить
             echo "PKG_MIRROR_HASH:=" >> Makefile
             cd - >/dev/null
             echo "--- $pkg_dir updated to commit: $commit ---"
@@ -152,9 +148,12 @@ jobs:
         set -e -x
         cd openwrt
         
+        version_lower=$(echo "${{ inputs.openwrt_version }}" | tr '[:upper:]' '[:lower:]')
+
         # Автоматическое исправление PKG_MIRROR_HASH для SNAPSHOT
-        if [[ "${{ inputs.amneziawg_version }}" == "master" ]]; then
+        if [[ "$version_lower" == "snapshot" ]]; then
           echo "=== Calculating PKG_MIRROR_HASH using FIXUP=1 ==="
+          # make check V=s FIXUP=1 выполняет загрузку, создает tarball и записывает хеш в Makefile
           make package/kmod-amneziawg/check V=s FIXUP=1 || true
           make package/amneziawg-tools/check V=s FIXUP=1 || true
           echo "=== Updated kmod-amneziawg Makefile ==="
@@ -187,16 +186,17 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: awgrelease/*
-        tag_name: ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }}-${{ inputs.openwrt_arch }}-${{ inputs.openwrt_target }}-${{ inputs.openwrt_subtarget }}-${{ inputs.amneziawg_version }}
-        name: 'AmneziaWG ${{ inputs.amneziawg_version }} for ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }} (${{ inputs.openwrt_arch }})'
+        # Включаем 'SNAPSHOT' в тег, если это так
+        tag_name: ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }}-${{ inputs.openwrt_arch }}-${{ inputs.openwrt_target }}-${{ inputs.openwrt_subtarget }}-${{ (contains(inputs.openwrt_version, 'snapshot') || contains(inputs.openwrt_version, 'SNAPSHOT')) && 'latest' || 'stable' }}
+        name: 'AmneziaWG for ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }} (${{ inputs.openwrt_arch }})'
         body: |
           !!!Do not forget to reboot your router after packages installation!!!
-          **AmneziaWG Version:** ${{ inputs.amneziawg_version }}
           **Build Date:** ${{ steps.get_date.outputs.date }}
           **Firmware:** ${{ inputs.firmware_type }}
           **OpenWrt/ImmortalWrt Version:** ${{ inputs.openwrt_version }}
           **Architecture:** ${{ inputs.openwrt_arch }}
           **Target/Subtarget:** ${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}
-        prerelease: ${{ contains(join(fromJSON('["snapshot", "master"]'), ','), inputs.openwrt_version) || inputs.amneziawg_version == 'master' }}
+        # Считаем релиз предрелизным, если это SNAPSHOT
+        prerelease: ${{ contains(inputs.openwrt_version, 'snapshot') || contains(inputs.openwrt_version, 'SNAPSHOT') }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
