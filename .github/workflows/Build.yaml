@@ -117,6 +117,7 @@ jobs:
         make -C openwrt defconfig
         
     - name: Update Makefiles latest commits
+      if: ${{ inputs.openwrt_version != 'SNAPSHOT' && inputs.openwrt_version != 'snapshot' }}
       run: |
         set -e -x
         cd openwrt/package/feeds/awgopenwrt
@@ -143,12 +144,9 @@ jobs:
           
           cd "$pkg_dir"
           
-          # Обновляем только PKG_SOURCE_VERSION
+          # Обновляем только PKG_SOURCE_VERSION, оставляем PKG_MIRROR_HASH как есть
+          # OpenWRT пересчитает хеш сам при первой сборке
           sed -i "s/^PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$commit/" Makefile
-          
-          # Для git-репозиториев используем skip для hash
-          # это позволит OpenWRT самому вычислить хеш после клонирования
-          sed -i "s/^PKG_MIRROR_HASH:=.*/PKG_MIRROR_HASH:=skip/" Makefile
           
           echo "--- $pkg_dir updated: commit $commit ---"
           cat Makefile | grep -E "(PKG_SOURCE_VERSION|PKG_MIRROR_HASH)"
