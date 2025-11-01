@@ -1,4 +1,4 @@
-name: Build AmneziaWG from OpenWRT\ImmortalWRT
+name: Build AmneziaWG from OpenWRT/ImmortalWRT
 
 on:
   workflow_dispatch:
@@ -12,12 +12,12 @@ on:
           - "openwrt"
           - "immortalwrt"
       openwrt_version:
-        description: "OpenWrt/ImmortalWrt version"
+        description: "OpenWrt/ImmortalWrt version (e.g., 23.05.0 or SNAPSHOT)"
         type: string
         required: true
-        default: "24.10.4"
+        default: "snapshot"
       amneziawg_version:
-        description: "AmneziaWG version"
+        description: "AmneziaWG version (Git ref or 'master' for latest)"
         type: string
         required: true
         default: "master"
@@ -39,11 +39,12 @@ on:
 
 jobs:
   build-amneziawg:
-    name: "Build AmneziaWG for ${{ inputs.firmware_type }}: ${{ inputs.openwrt_version }} - ${{ inputs.openwrt_arch }} - ${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}"
+    name: "Build AmneziaWG for ${{ inputs.firmware_type }}: ${{ inputs.openwrt_version }} - ${{ inputs.openwrt_arch }}"
     runs-on: ubuntu-22.04
     defaults:
       run:
         shell: bash
+
     steps:
     - name: Checkout AWG repository
       uses: actions/checkout@v5
@@ -57,13 +58,14 @@ jobs:
         set -e -x
         sudo apt-get update
         sudo apt-get install -y python3-pyelftools python3-dev python3-setuptools swig
-        
+
     - name: Download and prepare SDK
       run: |
         set -e -x
         # Преобразуем версию в нижний регистр для сравнения
         version_lower=$(echo "${{ inputs.openwrt_version }}" | tr '[:upper:]' '[:lower:]')
-        
+
+        # === 1. Определяем URL и паттерн SDK ===
         if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
           if [ "$version_lower" = "snapshot" ]; then
             base_url="https://downloads.openwrt.org/snapshots/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
@@ -79,30 +81,32 @@ jobs:
           fi
           sdk_pattern="immortalwrt-sdk"
         fi
-        
+
+        # === 2. Загрузка SDK ===
         # Более гибкий поиск SDK с поддержкой разных форматов архивов
         sdk_url=$(curl -s "${base_url}" | grep -oP "href=\"${sdk_pattern}[^\"]+\.tar\.(zst|xz|bz2|gz)\"" | sed -e 's/href="//' -e 's/"$//' | head -n1)
         if [[ -z "$sdk_url" ]]; then
-          echo "SDK file not found."
+          echo "SDK file not found at ${base_url}"
           exit 1
         fi
         curl -fsLO "$base_url$sdk_url" || exit 1
         file_name=$(basename "$sdk_url")
-        
+
         # Универсальная распаковка
         tar -xf "$file_name"
-        
+
         # Очистка всех возможных форматов архивов
         rm -f *.tar.* *.tgz
         mv *"${sdk_pattern}"* openwrt
         
+        # === 3. Настройка SDK ===
         echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
         ./openwrt/scripts/feeds update -a
-        
-        # Загружаем config.buildinfo для всех версий (включая SNAPSHOT)
+
+        # Загружаем config.buildinfo для всех версий
         curl -fsL "$base_url/config.buildinfo" > openwrt/.config
         
-        # Добавляем необходимые пакеты
+        # Добавляем необходимые пакеты (может потребоваться run 'make defconfig' если config.buildinfo неполный)
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> openwrt/.config
@@ -112,27 +116,63 @@ jobs:
         echo "CONFIG_PACKAGE_kmod-amneziawg=y" >> openwrt/.config
         echo "CONFIG_PACKAGE_amneziawg-tools=y" >> openwrt/.config
         echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> openwrt/.config
-        
+
         ./openwrt/scripts/feeds install -a
-        make -C openwrt defconfig
+        make -C openwrt defconfig # Применяем defconfig после редактирования .config
+
+    - name: Update Makefiles for 'master' (SNAPSHOT) version
+      if: ${{ inputs.amneziawg_version == 'master' }}
+      run: |
+        set -e -x
+        cd openwrt/package/feeds/awgopenwrt
         
+        update_commit() {
+          local pkg_dir="$1"
+          local repo="$2"
+          local branch="$3"
+          echo "--- Fetching latest commit for $pkg_dir ---"
+          commit=$(git ls-remote "$repo" "$branch" | awk '{print $1; exit}')
+          if [ -d "$pkg_dir" ]; then
+            cd "$pkg_dir"
+            # Устанавливаем PKG_SOURCE_VERSION на последний коммит
+            sed -i "s/^PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$commit/" Makefile
+            # Удаляем PKG_MIRROR_HASH для принудительного перерасчета
+            sed -i "/^PKG_MIRROR_HASH:=/d" Makefile
+            # Добавляем пустой хеш, чтобы make check мог его заполнить
+            echo "PKG_MIRROR_HASH:=" >> Makefile
+            cd - >/dev/null
+            echo "--- $pkg_dir updated to commit: $commit ---"
+          else
+            echo "Warning: directory $pkg_dir not found"
+          fi
+        }
+        
+        update_commit "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master"
+        update_commit "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master"
+        cd - >/dev/null
+
     - name: Compile AmneziaWG packages
       run: |
         set -e -x
         cd openwrt
         
-        # Запускаем с подробным выводом для диагностики
-        echo "=== Building kmod-amneziawg ==="
-        make -j1 V=s package/kmod-amneziawg/download 2>&1 | tee kmod-download.log || {
-          echo "Failed to download kmod-amneziawg sources"
-          echo "=== Download log ==="
-          cat kmod-download.log
-          echo "=== Checking Makefile ==="
-          cat package/feeds/awgopenwrt/kmod-amneziawg/Makefile || echo "Makefile not found"
-          exit 1
-        }
+        # --- Шаг 1: Автоматическое исправление PKG_MIRROR_HASH для SNAPSHOT ---
+        if [[ "${{ inputs.amneziawg_version }}" == "master" ]]; then
+          echo "=== Calculating PKG_MIRROR_HASH using FIXUP=1 (OpenWrt standard way) ==="
+          
+          # make check V=s FIXUP=1 выполняет загрузку, создает tarball и записывает хеш в Makefile
+          make package/kmod-amneziawg/check V=s FIXUP=1 || true
+          make package/amneziawg-tools/check V=s FIXUP=1 || true
+          
+          # Проверяем, что хеш был установлен
+          echo "=== Updated kmod-amneziawg Makefile ==="
+          grep "PKG_MIRROR_HASH" package/feeds/awgopenwrt/kmod-amneziawg/Makefile
+        fi
+
+        # --- Шаг 2: Компиляция ---
         
-        make package/kmod-amneziawg/{clean,prepare,compile} -j $(nproc)
+        echo "=== Building kmod-amneziawg ==="
+        make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
         
         echo "=== Building amneziawg-tools ==="
         make package/amneziawg-tools/{clean,download,prepare,compile} -j $(nproc)
@@ -147,7 +187,7 @@ jobs:
         mkdir awgrelease
         find "openwrt/bin/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/packages" -maxdepth 1 -type f -name 'kmod-amneziawg*' -exec cp {} awgrelease \;
         find "openwrt/bin/packages/${{ inputs.openwrt_arch }}/awgopenwrt" -maxdepth 1 -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp {} awgrelease \;
-        
+
     - name: Get current date for release notes
       id: get_date
       run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
@@ -156,15 +196,16 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: awgrelease/*
-        tag_name: ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }}-${{ inputs.openwrt_arch }}-${{ inputs.openwrt_target }}-${{ inputs.openwrt_subtarget }}
-        name: 'AmneziaWG ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }} for ${{ inputs.openwrt_arch }} (${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }})'
+        tag_name: ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }}-${{ inputs.openwrt_arch }}-${{ inputs.openwrt_target }}-${{ inputs.openwrt_subtarget }}-${{ inputs.amneziawg_version }}
+        name: 'AmneziaWG ${{ inputs.amneziawg_version }} for ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }} (${{ inputs.openwrt_arch }})'
         body: |
           !!!Do not forget to reboot your router after packages installation!!!
+          **AmneziaWG Version:** ${{ inputs.amneziawg_version }}
           **Build Date:** ${{ steps.get_date.outputs.date }}
           **Firmware:** ${{ inputs.firmware_type }}
           **OpenWrt/ImmortalWrt Version:** ${{ inputs.openwrt_version }}
           **Architecture:** ${{ inputs.openwrt_arch }}
           **Target/Subtarget:** ${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}
-        prerelease: false
+        prerelease: ${{ contains(join(fromJSON('["snapshot", "master"]'), ','), inputs.openwrt_version) || inputs.amneziawg_version == 'master' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
