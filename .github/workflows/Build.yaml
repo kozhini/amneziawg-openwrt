@@ -46,7 +46,7 @@ jobs:
       with:
         path: amneziawg
         # Используем main/master, так как конкретная версия больше не передается через input
-        ref: main
+        ref: master
         fetch-depth: 0
 
     - name: Install additional packages
