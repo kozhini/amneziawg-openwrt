@@ -60,7 +60,6 @@ jobs:
         set -e -x
         version_lower=$(echo "${{ inputs.openwrt_version }}" | tr '[:upper:]' '[:lower:]')
 
-        # Определяем URL и паттерн SDK
         if [ "${{ inputs.firmware_type }}" = "openwrt" ]; then
           if [ "$version_lower" = "snapshot" ]; then
             base_url="https://downloads.openwrt.org/snapshots/targets/${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}/"
@@ -77,7 +76,6 @@ jobs:
           sdk_pattern="immortalwrt-sdk"
         fi
 
-        # Загрузка SDK
         sdk_url=$(curl -s "${base_url}" | grep -oP "href=\"${sdk_pattern}[^\"]+\.tar\.(zst|xz|bz2|gz)\"" | sed -e 's/href="//' -e 's/"$//' | head -n1)
         if [[ -z "$sdk_url" ]]; then
           echo "SDK file not found at ${base_url}"
@@ -86,19 +84,15 @@ jobs:
         curl -fsLO "$base_url$sdk_url" || exit 1
         file_name=$(basename "$sdk_url")
 
-        # Распаковка
         tar -xf "$file_name"
         rm -f *.tar.* *.tgz
         mv *"${sdk_pattern}"* openwrt
         
-        # Настройка SDK
         echo "src-cpy awgopenwrt ../amneziawg" >> openwrt/feeds.conf.default
         ./openwrt/scripts/feeds update -a
 
-        # Загружаем .config
         curl -fsL "$base_url/config.buildinfo" > openwrt/.config
         
-        # Добавляем необходимые пакеты
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> openwrt/.config
         echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> openwrt/.config
@@ -112,35 +106,30 @@ jobs:
         ./openwrt/scripts/feeds install -a
         make -C openwrt defconfig
 
-    - name: Update Makefiles for SNAPSHOT
-      # Запускаем только если выбрана SNAPSHOT-версия OpenWrt/ImmortalWrt
-      if: contains(inputs.openwrt_version, 'snapshot') || contains(inputs.openwrt_version, 'SNAPSHOT')
+    - name: Update Makefiles latest commits
       run: |
         set -e -x
         cd openwrt/package/feeds/awgopenwrt
-        
-        update_commit() {
+        update_pkg() {
           local pkg_dir="$1"
           local repo="$2"
           local branch="$3"
-          echo "--- Fetching latest commit for $pkg_dir ---"
+          echo "--- Updating $pkg_dir from $branch ---"
           commit=$(git ls-remote "$repo" "$branch" | awk '{print $1; exit}')
+          url="$repo/archive/$commit.tar.gz"
+          hash=$(curl -L --retry 3 -s "$url" | sha256sum | cut -d' ' -f1)
           if [ -d "$pkg_dir" ]; then
             cd "$pkg_dir"
-            # Устанавливаем PKG_SOURCE_VERSION на последний коммит
             sed -i "s/^PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$commit/" Makefile
-            # Удаляем PKG_MIRROR_HASH для принудительного перерасчета
-            sed -i "/^PKG_MIRROR_HASH:=/d" Makefile
-            echo "PKG_MIRROR_HASH:=" >> Makefile
+            sed -i "s/^PKG_MIRROR_HASH:=.*/PKG_MIRROR_HASH:=$hash/" Makefile
             cd - >/dev/null
-            echo "--- $pkg_dir updated to commit: $commit ---"
+            echo "--- $pkg_dir updated: $commit ---"
           else
             echo "Warning: directory $pkg_dir not found"
           fi
         }
-        
-        update_commit "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master"
-        update_commit "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master"
+        update_pkg "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master"
+        update_pkg "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master"
         cd - >/dev/null
 
     - name: Compile AmneziaWG packages
@@ -150,7 +139,6 @@ jobs:
         
         version_lower=$(echo "${{ inputs.openwrt_version }}" | tr '[:upper:]' '[:lower:]')
 
-        # Автоматическое исправление PKG_MIRROR_HASH для SNAPSHOT
         if [[ "$version_lower" == "snapshot" ]]; then
           echo "=== Calculating PKG_MIRROR_HASH using FIXUP=1 ==="
           # make check V=s FIXUP=1 выполняет загрузку, создает tarball и записывает хеш в Makefile
@@ -160,7 +148,6 @@ jobs:
           grep "PKG_MIRROR_HASH" package/feeds/awgopenwrt/kmod-amneziawg/Makefile
         fi
 
-        # Компиляция
         echo "=== Building kmod-amneziawg ==="
         make package/kmod-amneziawg/{clean,download,prepare,compile} -j $(nproc)
         
