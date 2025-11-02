@@ -45,7 +45,6 @@ jobs:
       uses: actions/checkout@v5
       with:
         path: amneziawg
-        # Используем main/master, так как конкретная версия больше не передается через input
         ref: master
         fetch-depth: 0
 
@@ -139,7 +138,6 @@ jobs:
       run: |
         set -e -x
         cd openwrt
-        
         version_lower=$(echo "${{ inputs.openwrt_version }}" | tr '[:upper:]' '[:lower:]')
 
         if [[ "$version_lower" == "snapshot" ]]; then
@@ -176,7 +174,6 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: awgrelease/*
-        # Включаем 'SNAPSHOT' в тег, если это так
         tag_name: ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }}-${{ inputs.openwrt_arch }}-${{ inputs.openwrt_target }}-${{ inputs.openwrt_subtarget }}-${{ (contains(inputs.openwrt_version, 'snapshot') || contains(inputs.openwrt_version, 'SNAPSHOT')) && 'latest' || 'stable' }}
         name: 'AmneziaWG for ${{ inputs.firmware_type }}-${{ inputs.openwrt_version }} (${{ inputs.openwrt_arch }})'
         body: |
@@ -186,7 +183,7 @@ jobs:
           **OpenWrt/ImmortalWrt Version:** ${{ inputs.openwrt_version }}
           **Architecture:** ${{ inputs.openwrt_arch }}
           **Target/Subtarget:** ${{ inputs.openwrt_target }}/${{ inputs.openwrt_subtarget }}
-        # Считаем релиз предрелизным, если это SNAPSHOT
+
         prerelease: ${{ contains(inputs.openwrt_version, 'snapshot') || contains(inputs.openwrt_version, 'SNAPSHOT') }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
