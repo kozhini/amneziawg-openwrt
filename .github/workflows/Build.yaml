@@ -106,30 +106,33 @@ jobs:
         ./openwrt/scripts/feeds install -a
         make -C openwrt defconfig
 
-    - name: Update Makefiles latest commits
+    - name: Update Makefiles with latest commits
       run: |
         set -e -x
         cd openwrt/package/feeds/awgopenwrt
-        update_pkg() {
+        
+        update_commit() {
           local pkg_dir="$1"
           local repo="$2"
           local branch="$3"
-          echo "--- Updating $pkg_dir from $branch ---"
+          echo "--- Fetching latest commit for $pkg_dir ---"
           commit=$(git ls-remote "$repo" "$branch" | awk '{print $1; exit}')
-          url="$repo/archive/$commit.tar.gz"
-          hash=$(curl -L --retry 3 -s "$url" | sha256sum | cut -d' ' -f1)
           if [ -d "$pkg_dir" ]; then
             cd "$pkg_dir"
+            # Устанавливаем PKG_SOURCE_VERSION на последний коммит
             sed -i "s/^PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$commit/" Makefile
-            sed -i "s/^PKG_MIRROR_HASH:=.*/PKG_MIRROR_HASH:=$hash/" Makefile
+            # Удаляем PKG_MIRROR_HASH для принудительного перерасчета
+            sed -i "/^PKG_MIRROR_HASH:=/d" Makefile
+            echo "PKG_MIRROR_HASH:=" >> Makefile
             cd - >/dev/null
-            echo "--- $pkg_dir updated: $commit ---"
+            echo "--- $pkg_dir updated to commit: $commit ---"
           else
             echo "Warning: directory $pkg_dir not found"
           fi
         }
-        update_pkg "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master"
-        update_pkg "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master"
+        
+        update_commit "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master"
+        update_commit "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "master"
         cd - >/dev/null
 
     - name: Compile AmneziaWG packages
