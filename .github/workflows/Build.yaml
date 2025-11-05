@@ -130,7 +130,7 @@ jobs:
           fi
         }
         
-        update_commit "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "master"
+        update_commit "kmod-amneziawg" "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git" "feature/awg4"
         update_commit "amneziawg-tools" "https://github.com/amnezia-vpn/amneziawg-tools.git" "feature/awg4"
         cd - >/dev/null
 
