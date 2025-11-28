@@ -10,7 +10,7 @@ PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git
 # Reference: master branch
 PKG_SOURCE_VERSION:=866b0abe820d5a9c115fe3e4221132ecf8e39b94
-PKG_MIRROR_HASH:=a6fb403301710b54d7a927d594db2c9c0ba3ed01d2cff6452796debc7d3a845b
+PKG_MIRROR_HASH:=skip
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 MAKE_PATH:=src
