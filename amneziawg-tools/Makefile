@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=amneziawg-tools
-PKG_VERSION:=2.0.7c
+PKG_VERSION:=2.0.8
 PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
