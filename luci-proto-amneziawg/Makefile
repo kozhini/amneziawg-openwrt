@@ -2,15 +2,13 @@ include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=Support for AmneziaWG VPN
 LUCI_DESCRIPTION:=Provides support and Web UI for AmneziaWG VPN
-PKG_VERSION:=2.0.8
+PKG_VERSION:=3.0.1
 LUCI_DEPENDS:= \
 	+amneziawg-tools \
 	+kmod-amneziawg \
 	+ucode \
 	+luci-lib-uqr \
 	+resolveip \
-	+@BUSYBOX_CONFIG_IP \
-	+@BUSYBOX_CONFIG_FEATURE_IP_LINK
 LUCI_PKGARCH:=all
 PKGARCH:=all
 
