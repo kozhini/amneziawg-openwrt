@@ -2,14 +2,14 @@ include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=kmod-amneziawg
-PKG_VERSION:=2.0.8
+PKG_VERSION:=3.0.1
 PKG_RELEASE:=1
 WIREGUARD_VERSION:=1.0.0
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git
 #Reference: master branch
-PKG_SOURCE_VERSION:=44276df04a3b84e74c470afab84fdb42bd078e8c
+PKG_SOURCE_VERSION:=ce163101dbcddfb64631f5fea52252ea836372b5
 PKG_MIRROR_HASH:=41a3710965215764cc7aeadfbccc245ef423e0badad31dcf1dee7b3c42b7a78b
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
@@ -26,9 +26,8 @@ define KernelPackage/amneziawg
 	DEPENDS:= \
 		+kmod-udptunnel4 \
 		+kmod-udptunnel6 \
-		+kmod-crypto-aead \
-		+kmod-crypto-manager \
 		+kmod-crypto-kpp \
+		+kmod-crypto-lib-chacha20 \
 		+kmod-crypto-lib-chacha20poly1305 \
 		+kmod-crypto-lib-curve25519
 	CONFLICTS:=kmod-wireguard
