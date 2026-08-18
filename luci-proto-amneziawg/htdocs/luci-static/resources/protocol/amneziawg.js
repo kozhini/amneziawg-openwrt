@@ -177,8 +177,32 @@ const awgOptions = [
 		name: 'awg_max_handshake_attempts', key: 'MaxHandshakeAttempts', title: _('Max Handshake Attempts'),
 		descr: _('AmneziaWG 3.0. Number of handshake retries before giving up. A single value or a <em>low-high</em> range. Default is 18.'),
 		validate: validateU16Range, placeholder: '18'
+	},
+
+	/* AmneziaWG 3.1. Boolean parameters, rendered as checkboxes and written to
+	   the configuration file as `on'/`off'. */
+	{
+		name: 'awg_random_trailers', key: 'RandomTrailers', title: _('Random Trailers'),
+		descr: _('AmneziaWG 3.1. Append a random length trailer of extra bytes to packets so their size varies. Must be enabled on both ends of the tunnel.'),
+		flag: true
+	},
+	{
+		name: 'awg_disable_cookies', key: 'DisableCookies', title: _('Disable Cookies'),
+		descr: _('AmneziaWG 3.1. Stop sending the WireGuard cookie reply messages, removing a distinctive packet type. Meant to be enabled on both ends of the tunnel.'),
+		flag: true
 	}
 ];
+
+/* AmneziaWG boolean parameters are written as `on'/`off' (or `1'/`0') in the
+   configuration file but stored as an UCI flag (`1'/`'') in LuCI. These helpers
+   translate between the two representations. */
+function awgFlagToUci(value) {
+	return /^(on|1|true|yes)$/i.test(String(value ?? '').trim()) ? '1' : '';
+}
+
+function awgFlagToConfig(value) {
+	return (value == '1') ? 'on' : 'off';
+}
 
 var stubValidator = {
 	factory: validation,
@@ -202,7 +226,7 @@ function buildSVGQRCode(data, code) {
 	};
 	const svg = uqr.renderSVG(data, options);
 	code.style.opacity = '';
-	dom.content(code, Object.assign(E(svg), { style: 'width:100%;height:auto' }));
+	dom.content(code, Object.assign(E(svg), { style: 'width:100%;height:auto;max-width:100%;display:block;margin:0 auto' }));
 }
 
 var cbiKeyPairGenerate = form.DummyValue.extend({
@@ -347,7 +371,7 @@ return network.registerProtocol('amneziawg', {
 		catch(e) {}
 
 		for (let awgOption of awgOptions) {
-			o = s.taboption('amneziawg', form.Value, awgOption.name, awgOption.title, awgOption.descr);
+			o = s.taboption('amneziawg', awgOption.flag ? form.Flag : form.Value, awgOption.name, awgOption.title, awgOption.descr);
 			o.optional = true;
 
 			if (awgOption.datatype)
@@ -519,8 +543,11 @@ return network.registerProtocol('amneziawg', {
 					s.getOption('listen_port').getUIElement(s.section).setValue(config.interface_listenport || '');
 					s.getOption('addresses').getUIElement(s.section).setValue(config.interface_address);
 
-					for (let awgOption of awgOptions)
-						s.getOption(awgOption.name).getUIElement(s.section).setValue(config['interface_' + awgOption.key.toLowerCase()] || '');
+					for (let awgOption of awgOptions) {
+						const imported = config['interface_' + awgOption.key.toLowerCase()] || '';
+						s.getOption(awgOption.name).getUIElement(s.section).setValue(
+							awgOption.flag ? awgFlagToUci(imported) : imported);
+					}
 
 					if (config.interface_dns)
 						s.getOption('dns').getUIElement(s.section).setValue(config.interface_dns);
@@ -569,6 +596,7 @@ return network.registerProtocol('amneziawg', {
 							uci.set('network', sid, 'preshared_key', pconf.peer_presharedkey);
 							uci.set('network', sid, 'allowed_ips', pconf.peer_allowedips);
 							uci.set('network', sid, 'persistent_keepalive', pconf.peer_persistentkeepalive);
+
 							break;
 						}
 					}
@@ -856,6 +884,11 @@ return network.registerProtocol('amneziawg', {
 			const awg = awgOptions.map(function(awgOption) {
 				const value = s.formvalue(s.section, awgOption.name);
 
+				if (awgOption.flag)
+					return (value == '1')
+						? '%s = %s'.format(awgOption.key, awgFlagToConfig(value))
+						: '# %s not defined'.format(awgOption.key);
+
 				return value
 					? '%s = %s'.format(awgOption.key, value)
 					: '# %s not defined'.format(awgOption.key);
@@ -981,7 +1014,11 @@ return network.registerProtocol('amneziawg', {
 					}, [
 						E('div', {
 							'class': 'qr-code',
-							'style': 'text-align:center'
+							// Bound the QR code so that even a long AmneziaWG
+							// configuration scales down to fit and never overflows
+							// the page: full width on narrow screens, capped at
+							// 320px next to the textual configuration otherwise.
+							'style': 'text-align:center;flex:0 0 auto;width:min(100%, 320px);max-width:100%'
 						}, [
 							E('em', { 'class': 'spinning' }, [ _('Generating QR code…') ])
 						]),
