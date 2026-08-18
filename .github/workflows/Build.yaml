@@ -15,7 +15,7 @@ on:
         description: "OpenWrt/ImmortalWrt version (e.g., 23.05.0 or SNAPSHOT)"
         type: string
         required: true
-        default: "24.10.4"
+        default: "24.10.6"
       openwrt_arch:
         description: "Architecture"
         type: string
