@@ -46,6 +46,16 @@ awg_keepalive_timeout:KeepaliveTimeout
 awg_max_handshake_attempts:MaxHandshakeAttempts
 "
 
+# Boolean AmneziaWG interface parameters (AmneziaWG 3.1), in the same
+# `<uci option>:<configuration file key>' notation. They are stored as UCI
+# flags and only written to the configuration file when enabled, so that the
+# key is passed down to the implementation exclusively when the user turns it
+# on. `awg' accepts `on'/`off' as well as `1'/`0'; the canonical `on' is used.
+AWG_BOOL_PARAMS="
+awg_random_trailers:RandomTrailers
+awg_disable_cookies:DisableCookies
+"
+
 proto_amneziawg_init_config() {
 	proto_config_add_string "private_key"
 	proto_config_add_int "listen_port"
@@ -75,6 +85,9 @@ proto_amneziawg_init_config() {
 	proto_config_add_string "awg_reject_after_time"
 	proto_config_add_string "awg_keepalive_timeout"
 	proto_config_add_string "awg_max_handshake_attempts"
+	# AmneziaWG 3.1 boolean parameters
+	proto_config_add_boolean "awg_random_trailers"
+	proto_config_add_boolean "awg_disable_cookies"
 # shellcheck disable=SC2034
 	available=1
 # shellcheck disable=SC2034
@@ -193,6 +206,13 @@ proto_amneziawg_write_params() {
 		config_get value "${config}" "${option}"
 
 		[ -n "${value}" ] && echo "${param##*:}=${value}" >> "${awg_cfg}"
+	done
+
+	for param in ${AWG_BOOL_PARAMS}; do
+		option="${param%%:*}"
+		config_get_bool value "${config}" "${option}" 0
+
+		[ "${value}" = "1" ] && echo "${param##*:}=on" >> "${awg_cfg}"
 	done
 
 	return 0
