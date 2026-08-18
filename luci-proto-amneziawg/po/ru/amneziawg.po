@@ -264,3 +264,23 @@ msgstr ""
 
 msgid "Download peer configuration file"
 msgstr "Скачать файл конфигурации пира"
+
+msgid "Random Trailers"
+msgstr "Случайные хвосты"
+
+msgid ""
+"AmneziaWG 3.1. Append a random length trailer of extra bytes to packets so "
+"their size varies. Must be enabled on both ends of the tunnel."
+msgstr ""
+"AmneziaWG 3.1. Добавляет к пакетам хвост случайной длины из лишних байтов, "
+"чтобы их размер менялся. Должно быть включено на обеих сторонах туннеля."
+
+msgid "Disable Cookies"
+msgstr "Отключить cookie"
+
+msgid ""
+"AmneziaWG 3.1. Stop sending the WireGuard cookie reply messages, removing a "
+"distinctive packet type. Meant to be enabled on both ends of the tunnel."
+msgstr ""
+"AmneziaWG 3.1. Прекращает отправку ответных cookie-сообщений WireGuard, убирая "
+"характерный тип пакетов. Предполагается включение на обеих сторонах туннеля."
