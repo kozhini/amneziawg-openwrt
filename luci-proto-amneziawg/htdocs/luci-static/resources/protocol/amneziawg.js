@@ -28,16 +28,18 @@ var generatePsk = rpc.declare({
 	expect: { psk: '' }
 });
 
-var generateHeaderProtectionKey = rpc.declare({
-	object: 'luci.amneziawg',
-	method: 'generateHeaderProtectionKey',
-	expect: { key: '' }
-});
-
 var qrIcon = '<svg viewBox="0 0 29 29" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" d="M0 0h29v29H0z"/><path d="M4 4h1v1H4zM5 4h1v1H5zM6 4h1v1H6zM7 4h1v1H7zM8 4h1v1H8zM9 4h1v1H9zM10 4h1v1h-1zM12 4h1v1h-1zM13 4h1v1h-1zM14 4h1v1h-1zM15 4h1v1h-1zM16 4h1v1h-1zM18 4h1v1h-1zM19 4h1v1h-1zM20 4h1v1h-1zM21 4h1v1h-1zM22 4h1v1h-1zM23 4h1v1h-1zM24 4h1v1h-1zM4 5h1v1H4zM10 5h1v1h-1zM12 5h1v1h-1zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM4 6h1v1H4zM6 6h1v1H6zM7 6h1v1H7zM8 6h1v1H8zM10 6h1v1h-1zM12 6h1v1h-1zM18 6h1v1h-1zM20 6h1v1h-1zM21 6h1v1h-1zM22 6h1v1h-1zM24 6h1v1h-1zM4 7h1v1H4zM6 7h1v1H6zM7 7h1v1H7zM8 7h1v1H8zM10 7h1v1h-1zM12 7h1v1h-1zM13 7h1v1h-1zM14 7h1v1h-1zM15 7h1v1h-1zM18 7h1v1h-1zM20 7h1v1h-1zM21 7h1v1h-1zM22 7h1v1h-1zM24 7h1v1h-1zM4 8h1v1H4zM6 8h1v1H6zM7 8h1v1H7zM8 8h1v1H8zM10 8h1v1h-1zM16 8h1v1h-1zM18 8h1v1h-1zM20 8h1v1h-1zM21 8h1v1h-1zM22 8h1v1h-1zM24 8h1v1h-1zM4 9h1v1H4zM10 9h1v1h-1zM12 9h1v1h-1zM13 9h1v1h-1zM15 9h1v1h-1zM18 9h1v1h-1zM24 9h1v1h-1zM4 10h1v1H4zM5 10h1v1H5zM6 10h1v1H6zM7 10h1v1H7zM8 10h1v1H8zM9 10h1v1H9zM10 10h1v1h-1zM12 10h1v1h-1zM14 10h1v1h-1zM16 10h1v1h-1zM18 10h1v1h-1zM19 10h1v1h-1zM20 10h1v1h-1zM21 10h1v1h-1zM22 10h1v1h-1zM23 10h1v1h-1zM24 10h1v1h-1zM13 11h1v1h-1zM14 11h1v1h-1zM15 11h1v1h-1zM16 11h1v1h-1zM4 12h1v1H4zM5 12h1v1H5zM8 12h1v1H8zM9 12h1v1H9zM10 12h1v1h-1zM13 12h1v1h-1zM15 12h1v1h-1zM19 12h1v1h-1zM21 12h1v1h-1zM22 12h1v1h-1zM23 12h1v1h-1zM24 12h1v1h-1zM5 13h1v1H5zM6 13h1v1H6zM8 13h1v1H8zM11 13h1v1h-1zM13 13h1v1h-1zM14 13h1v1h-1zM15 13h1v1h-1zM16 13h1v1h-1zM19 13h1v1h-1zM22 13h1v1h-1zM4 14h1v1H4zM5 14h1v1H5zM9 14h1v1H9zM10 14h1v1h-1zM11 14h1v1h-1zM15 14h1v1h-1zM18 14h1v1h-1zM19 14h1v1h-1zM20 14h1v1h-1zM21 14h1v1h-1zM22 14h1v1h-1zM23 14h1v1h-1zM7 15h1v1H7zM8 15h1v1H8zM9 15h1v1H9zM11 15h1v1h-1zM12 15h1v1h-1zM13 15h1v1h-1zM17 15h1v1h-1zM18 15h1v1h-1zM20 15h1v1h-1zM21 15h1v1h-1zM23 15h1v1h-1zM4 16h1v1H4zM6 16h1v1H6zM10 16h1v1h-1zM11 16h1v1h-1zM13 16h1v1h-1zM14 16h1v1h-1zM16 16h1v1h-1zM17 16h1v1h-1zM18 16h1v1h-1zM22 16h1v1h-1zM23 16h1v1h-1zM24 16h1v1h-1zM12 17h1v1h-1zM16 17h1v1h-1zM17 17h1v1h-1zM18 17h1v1h-1zM4 18h1v1H4zM5 18h1v1H5zM6 18h1v1H6zM7 18h1v1H7zM8 18h1v1H8zM9 18h1v1H9zM10 18h1v1h-1zM14 18h1v1h-1zM16 18h1v1h-1zM17 18h1v1h-1zM21 18h1v1h-1zM22 18h1v1h-1zM23 18h1v1h-1zM4 19h1v1H4zM10 19h1v1h-1zM12 19h1v1h-1zM13 19h1v1h-1zM15 19h1v1h-1zM16 19h1v1h-1zM19 19h1v1h-1zM21 19h1v1h-1zM23 19h1v1h-1zM24 19h1v1h-1zM4 20h1v1H4zM6 20h1v1H6zM7 20h1v1H7zM8 20h1v1H8zM10 20h1v1h-1zM12 20h1v1h-1zM13 20h1v1h-1zM15 20h1v1h-1zM18 20h1v1h-1zM19 20h1v1h-1zM20 20h1v1h-1zM22 20h1v1h-1zM23 20h1v1h-1zM24 20h1v1h-1zM4 21h1v1H4zM6 21h1v1H6zM7 21h1v1H7zM8 21h1v1H8zM10 21h1v1h-1zM13 21h1v1h-1zM15 21h1v1h-1zM16 21h1v1h-1zM19 21h1v1h-1zM21 21h1v1h-1zM23 21h1v1h-1zM24 21h1v1h-1zM4 22h1v1H4zM6 22h1v1H6zM7 22h1v1H7zM8 22h1v1H8zM10 22h1v1h-1zM13 22h1v1h-1zM15 22h1v1h-1zM18 22h1v1h-1zM19 22h1v1h-1zM20 22h1v1h-1zM21 22h1v1h-1zM22 22h1v1h-1zM4 23h1v1H4zM10 23h1v1h-1zM12 23h1v1h-1zM13 23h1v1h-1zM14 23h1v1h-1zM17 23h1v1h-1zM18 23h1v1h-1zM20 23h1v1h-1zM22 23h1v1h-1zM4 24h1v1H4zM5 24h1v1H5zM6 24h1v1H6zM7 24h1v1H7zM8 24h1v1H8zM9 24h1v1H9zM10 24h1v1h-1zM12 24h1v1h-1zM13 24h1v1h-1zM14 24h1v1h-1zM16 24h1v1h-1zM17 24h1v1h-1zM18 24h1v1h-1zM22 24h1v1h-1zM24 24h1v1h-1z"/></svg>';
 
-const U16_MAX = 65535;
-const U32_MAX = 4294967295;
+function ensureStylesheet() {
+	if (document.querySelector('link[data-amneziawg-styles]'))
+		return;
+
+	document.head.appendChild(E('link', {
+		'rel': 'stylesheet',
+		'href': L.resource('amneziawg.css'),
+		'data-amneziawg-styles': ''
+	}));
+}
 
 function validateBase64(section_id, value) {
 	if (value.length == 0)
@@ -52,185 +54,165 @@ function validateBase64(section_id, value) {
 	return true;
 }
 
-/* Parses a AmneziaWG range value, which is either a single number or a
-   `low-high' pair. Returns null if the value is not a well formed range. */
-function parseRange(value) {
-	const m = String(value).match(/^(\d+)(?:-(\d+))?$/);
-
-	if (!m)
-		return null;
-
-	const lo = +m[1];
-	const hi = (m[2] != null) ? +m[2] : lo;
-
-	return (hi < lo) ? null : { lo: lo, hi: hi };
-}
-
-function rangesOverlap(a, b) {
-	return (a.lo <= b.hi && b.lo <= a.hi);
-}
-
-/* Builds a validator for `uint,range' typed options. */
-function validateRange(max) {
-	return function(section_id, value) {
-		if (value == null || value.length == 0)
-			return true;
-
-		const range = parseRange(value);
-
-		if (!range)
-			return _('Expecting: a single number or a <em>low-high</em> range');
-
-		if (range.hi > max)
-			return _('Expecting: a value between 0 and %s').format(max);
-
-		return true;
-	};
-}
-
-const validateU16Range = validateRange(U16_MAX);
-const validateU32Range = validateRange(U32_MAX);
-
-/* The magic headers H1-H4 select the packet type of each AmneziaWG message,
-   therefore their ranges must not overlap each other. */
-function validateHeader(section_id, value) {
-	const generic = validateU32Range.call(this, section_id, value);
-
-	if (generic !== true)
-		return generic;
-
+function validateUnsignedIntegerRange(section_id, value, max) {
 	if (value == null || value.length == 0)
 		return true;
 
-	const own = parseRange(value);
+	var match = value.match(/^(\d+)(?:-(\d+))?$/);
+	if (!match)
+		return _('Expected a number or an ascending range (for example 15-30)');
 
-	for (let name of [ 'awg_h1', 'awg_h2', 'awg_h3', 'awg_h4' ]) {
-		if (name == this.option)
-			continue;
+	var lower = Number(match[1]),
+	    upper = Number(match[2] || match[1]);
 
-		const other = parseRange(this.section.formvalue(section_id, name) ?? '');
-
-		if (other && rangesOverlap(own, other))
-			return _('Expecting: a range not overlapping %s').format(name.replace('awg_', '').toUpperCase());
-	}
+	if (!Number.isSafeInteger(lower) || !Number.isSafeInteger(upper) ||
+	    lower > upper || upper > max)
+		return _('Range values must be between 0 and %d').format(max);
 
 	return true;
 }
 
-/* Single source of truth for the AmneziaWG specific interface options. Every
-   entry maps an UCI option to the key used in AmneziaWG configuration files,
-   and is rendered on the `AmneziaWG Settings' tab, imported from and exported
-   to configuration files. */
-const awgOptions = [
-	{ name: 'awg_jc',   key: 'Jc',   title: _('Jc'),   descr: _('Junk packet count.'),        datatype: 'uinteger', placeholder: '0' },
-	{ name: 'awg_jmin', key: 'Jmin', title: _('Jmin'), descr: _('Junk packet minimum size.'), datatype: 'uinteger', placeholder: '0' },
-	{ name: 'awg_jmax', key: 'Jmax', title: _('Jmax'), descr: _('Junk packet maximum size.'), datatype: 'uinteger', placeholder: '0' },
-
-	{ name: 'awg_s1', key: 'S1', title: _('S1'), descr: _('Handshake initiation packet junk header size.'), datatype: 'uinteger', placeholder: '0' },
-	{ name: 'awg_s2', key: 'S2', title: _('S2'), descr: _('Handshake response packet junk header size.'),   datatype: 'uinteger', placeholder: '0' },
-	{ name: 'awg_s3', key: 'S3', title: _('S3'), descr: _('Cookie reply packet junk header size.'),         datatype: 'uinteger', placeholder: '0' },
-	{ name: 'awg_s4', key: 'S4', title: _('S4'), descr: _('Transport packet junk header size.'),            datatype: 'uinteger', placeholder: '0' },
-
-	{ name: 'awg_h1', key: 'H1', title: _('H1'), descr: _('Handshake initiation packet type header. A single value or a <em>low-high</em> range.'), validate: validateHeader, placeholder: '1' },
-	{ name: 'awg_h2', key: 'H2', title: _('H2'), descr: _('Handshake response packet type header. A single value or a <em>low-high</em> range.'),   validate: validateHeader, placeholder: '2' },
-	{ name: 'awg_h3', key: 'H3', title: _('H3'), descr: _('Handshake cookie packet type header. A single value or a <em>low-high</em> range.'),      validate: validateHeader, placeholder: '3' },
-	{ name: 'awg_h4', key: 'H4', title: _('H4'), descr: _('Transport packet type header. A single value or a <em>low-high</em> range.'),             validate: validateHeader, placeholder: '4' },
-
-	{ name: 'awg_i1', key: 'I1', title: _('I1'), descr: _('First special junk packet signature.'),   datatype: 'string' },
-	{ name: 'awg_i2', key: 'I2', title: _('I2'), descr: _('Second special junk packet signature.'),  datatype: 'string' },
-	{ name: 'awg_i3', key: 'I3', title: _('I3'), descr: _('Third special junk packet signature.'),   datatype: 'string' },
-	{ name: 'awg_i4', key: 'I4', title: _('I4'), descr: _('Fourth special junk packet signature.'),  datatype: 'string' },
-	{ name: 'awg_i5', key: 'I5', title: _('I5'), descr: _('Fifth special junk packet signature.'),   datatype: 'string' },
-
-	/* AmneziaWG 3.0 */
-	{
-		name: 'awg_header_protection_key', key: 'HeaderProtectionKey', title: _('Header Protection Key'),
-		descr: _('AmneziaWG 3.0. Base64-encoded key used to encrypt the low entropy packet header fields. Must be identical on both sides and requires S1-S4 to be at least 12.'),
-		validate: validateBase64, password: true
-	},
-	{
-		name: 'awg_content_padding_addition', key: 'ContentPaddingAddition', title: _('Content Padding Addition'),
-		descr: _('AmneziaWG 3.0. Additional padding added to transport packets, in bytes. A single value or a <em>low-high</em> range.'),
-		validate: validateU16Range, placeholder: '0'
-	},
-	{
-		name: 'awg_rekey_after_time', key: 'RekeyAfterTime', title: _('Rekey After Time'),
-		descr: _('AmneziaWG 3.0. Seconds after which a new handshake is initiated. A single value or a <em>low-high</em> range. Default is 120.'),
-		validate: validateU16Range, placeholder: '120'
-	},
-	{
-		name: 'awg_rekey_timeout', key: 'RekeyTimeout', title: _('Rekey Timeout'),
-		descr: _('AmneziaWG 3.0. Seconds after which an unanswered handshake is repeated. A single value or a <em>low-high</em> range. Default is 5.'),
-		validate: validateU16Range, placeholder: '5'
-	},
-	{
-		name: 'awg_reject_after_time', key: 'RejectAfterTime', title: _('Reject After Time'),
-		descr: _('AmneziaWG 3.0. Seconds after which a session key is not used anymore. A single value or a <em>low-high</em> range. Default is 180.'),
-		validate: validateU16Range, placeholder: '180'
-	},
-	{
-		name: 'awg_keepalive_timeout', key: 'KeepaliveTimeout', title: _('Keepalive Timeout'),
-		descr: _('AmneziaWG 3.0. Seconds of silence after which a keep alive message is sent. A single value or a <em>low-high</em> range. Default is 10.'),
-		validate: validateU16Range, placeholder: '10'
-	},
-	{
-		name: 'awg_max_handshake_attempts', key: 'MaxHandshakeAttempts', title: _('Max Handshake Attempts'),
-		descr: _('AmneziaWG 3.0. Number of handshake retries before giving up. A single value or a <em>low-high</em> range. Default is 18.'),
-		validate: validateU16Range, placeholder: '18'
-	},
-
-	/* AmneziaWG 3.1. Boolean parameters, rendered as checkboxes and written to
-	   the configuration file as `on'/`off'. */
-	{
-		name: 'awg_random_trailers', key: 'RandomTrailers', title: _('Random Trailers'),
-		descr: _('AmneziaWG 3.1. Append a random length trailer of extra bytes to packets so their size varies. Must be enabled on both ends of the tunnel.'),
-		flag: true
-	},
-	{
-		name: 'awg_disable_cookies', key: 'DisableCookies', title: _('Disable Cookies'),
-		descr: _('AmneziaWG 3.1. Stop sending the WireGuard cookie reply messages, removing a distinctive packet type. Meant to be enabled on both ends of the tunnel.'),
-		flag: true
-	}
-];
-
-/* AmneziaWG boolean parameters are written as `on'/`off' (or `1'/`0') in the
-   configuration file but stored as an UCI flag (`1'/`'') in LuCI. These helpers
-   translate between the two representations. */
-function awgFlagToUci(value) {
-	return /^(on|1|true|yes)$/i.test(String(value ?? '').trim()) ? '1' : '';
+function validateUint16Range(section_id, value) {
+	return validateUnsignedIntegerRange(section_id, value, 65535);
 }
 
-function awgFlagToConfig(value) {
-	return (value == '1') ? 'on' : 'off';
+function validateUint32Range(section_id, value) {
+	return validateUnsignedIntegerRange(section_id, value, 4294967295);
+}
+
+function validateAwgBoolean(section_id, value) {
+	if (value == null || value.length == 0)
+		return true;
+
+	if (!value.match(/^(?:on|off|\d+)$/i))
+		return _('Expected "on", "off", or a non-negative integer');
+
+	return true;
+}
+
+function awgBooleanToFlag(value) {
+	var normalized = String(value == null ? '' : value).toLowerCase();
+
+	return (normalized == 'on' || normalized.match(/^\d*[1-9]\d*$/)) ? '1' : '0';
+}
+
+function awgBooleanToConfig(value) {
+	return awgBooleanToFlag(value) == '1' ? 'on' : 'off';
 }
 
 var stubValidator = {
 	factory: validation,
-	apply(type, value, args) {
+	apply: function(type, value, args) {
 		if (value != null)
 			this.value = value;
 
 		return validation.types[type].apply(this, args);
 	},
-	assert(condition) {
+	assert: function(condition) {
 		return !!condition;
 	}
 };
 
+function generateDescription(name, texts) {
+	return E('li', { 'style': 'color: inherit;' }, [
+		E('span', name),
+		E('ul', texts.map(function (text) {
+			return E('li', { 'style': 'color: inherit;' }, text);
+		}))
+	]);
+}
+
+var cbiSettingGroup = form.DummyValue.extend({
+	renderWidget: function() {
+		return E('div', { 'class': 'awg-setting-group' }, [
+			E('h4', [ this.groupTitle ]),
+			this.groupDescription ? E('p', [ this.groupDescription ]) : ''
+		]);
+	}
+});
+
+function addSettingGroup(section, tab, option, title, description) {
+	var group = section.taboption(tab, cbiSettingGroup, option, ' ');
+	group.groupTitle = title;
+	group.groupDescription = description;
+	return group;
+}
+
 function buildSVGQRCode(data, code) {
-	// pixel size larger than 3 clips right and bottom edges of complex configs
+	// pixel size 3 for mobile browser
 	const options = {
 		pixelSize: 3,
 		whiteColor: 'white',
 		blackColor: 'black'
 	};
-	const svg = uqr.renderSVG(data, options);
-	code.style.opacity = '';
-	dom.content(code, Object.assign(E(svg), { style: 'width:100%;height:auto;max-width:100%;display:block;margin:0 auto' }));
+
+	try {
+		const svg = uqr.renderSVG(data, options);
+		code.style.opacity = '';
+		dom.content(code, Object.assign(E(svg), {
+			style: 'width:100%;height:auto'
+		}));
+	}
+	catch (e) {
+		console.warn('QR generation failed:', e);
+
+		code.style.opacity = '';
+		dom.content(code, E('div', {
+			'class': 'alert-message warning',
+			'style': 'margin:0;text-align:center'
+		}, [
+			_('QR code generation failed. The configuration may be too large.')
+		]));
+	}
+}
+
+function fallbackCopyText(value) {
+	return new Promise(function(resolve, reject) {
+		var input = E('textarea', {
+			'style': 'position:fixed;left:-9999px;top:-9999px',
+			'readonly': ''
+		}, [ value ]);
+
+		document.body.appendChild(input);
+		input.select();
+
+		try {
+			if (document.execCommand('copy'))
+				resolve();
+			else
+				reject(new Error('copy command failed'));
+		}
+		catch (error) {
+			reject(error);
+		}
+		finally {
+			document.body.removeChild(input);
+		}
+	});
+}
+
+function copyText(value) {
+	if (navigator.clipboard && navigator.clipboard.writeText)
+		return navigator.clipboard.writeText(value).catch(function() {
+			return fallbackCopyText(value);
+		});
+
+	return fallbackCopyText(value);
+}
+
+function downloadText(value, filename) {
+	var blob = new Blob([ value ], { type: 'text/plain;charset=utf-8' }),
+	    url = URL.createObjectURL(blob),
+	    link = E('a', { 'href': url, 'download': filename });
+
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+	window.setTimeout(function() { URL.revokeObjectURL(url); }, 0);
 }
 
 var cbiKeyPairGenerate = form.DummyValue.extend({
-	cfgvalue(section_id, value) {
+	cfgvalue: function(section_id, value) {
 		return E('button', {
 			'class': 'btn',
 			'click': ui.createHandlerFn(this, function(section_id, ev) {
@@ -248,58 +230,42 @@ var cbiKeyPairGenerate = form.DummyValue.extend({
 	}
 });
 
-var cbiHeaderProtectionKeyGenerate = form.DummyValue.extend({
-	cfgvalue(section_id, value) {
-		return E('button', {
-			'class': 'btn',
-			'click': ui.createHandlerFn(this, function(section_id, ev) {
-				var key = this.section.getUIElement(section_id, 'awg_header_protection_key'),
-				    map = this.map;
-
-				return generateHeaderProtectionKey().then(function(hpk) {
-					key.setValue(hpk);
-					map.save(null, true);
-				});
-			}, section_id)
-		}, [ _('Generate new header protection key') ]);
-	}
-});
-
 function handleWindowDragDropIgnore(ev) {
 	ev.preventDefault()
 }
 
 return network.registerProtocol('amneziawg', {
-	getI18n() {
+	getI18n: function() {
 		return _('AmneziaWG VPN');
 	},
 
-	getIfname() {
+	getIfname: function() {
 		return this._ubus('l3_device') || this.sid;
 	},
 
-	getPackageName() {
+	getPackageName: function() {
 		return 'amneziawg-tools';
 	},
 
-	isFloating() {
+	isFloating: function() {
 		return true;
 	},
 
-	isVirtual() {
+	isVirtual: function() {
 		return true;
 	},
 
-	getDevices() {
+	getDevices: function() {
 		return null;
 	},
 
-	containsDevice(ifname) {
+	containsDevice: function(ifname) {
 		return (network.getIfnameOf(ifname) == this.getIfname());
 	},
 
-	renderFormOptions(s) {
-		var o, ss;
+	renderFormOptions: function(s) {
+		var o, ss, ss2;
+		ensureStylesheet();
 
 		// -- general ---------------------------------------------------------------------
 
@@ -307,6 +273,8 @@ return network.registerProtocol('amneziawg', {
 		o.password = true;
 		o.validate = validateBase64;
 		o.rmempty = false;
+
+		var serverName = this.getIfname();
 
 		o = s.taboption('general', form.Value, 'public_key', _('Public Key'), _('Base64-encoded public key of this interface for sharing.'));
 		o.rmempty = false;
@@ -360,35 +328,176 @@ return network.registerProtocol('amneziawg', {
 			return true;
 		};
 
-		o = s.taboption('advanced', form.DynamicList, 'ip6prefix', _('IPv6 routed prefix'), _('This is the prefix routed to you by your provider for use by clients'));
-		o.datatype = 'cidr6';
+        // AmneziaWG
 
-		// -- amneziawg -------------------------------------------------------------------
+        try {
+            s.tab('amneziawg', _('AmneziaWG Settings'), _('Further information about AmneziaWG interfaces and peers at <a href=\'https://docs.amnezia.org/documentation/amnezia-wg\'>amnezia.org</a>.'));
+        }
+        catch(e) {}
 
-		try {
-			s.tab('amneziawg', _('AmneziaWG Settings'), _('Further information about AmneziaWG interfaces and peers at <a href=\'https://docs.amnezia.org/documentation/amnezia-wg\'>amnezia.org</a>.'));
-		}
-		catch(e) {}
+		addSettingGroup(s, 'amneziawg', '_awg_group_junk', _('Junk packets'),
+			_('Packet count and size values used to disguise AmneziaWG traffic. Importing a known-good configuration is recommended.'));
 
-		for (let awgOption of awgOptions) {
-			o = s.taboption('amneziawg', awgOption.flag ? form.Flag : form.Value, awgOption.name, awgOption.title, awgOption.descr);
-			o.optional = true;
+        o = s.taboption('amneziawg', form.Value, 'awg_jc', _('Jc'), _('Junk packet count.'));
+        o.datatype = 'uinteger';
+        o.placeholder = '0';
+        o.optional = true;
 
-			if (awgOption.datatype)
-				o.datatype = awgOption.datatype;
+        o = s.taboption('amneziawg', form.Value, 'awg_jmin', _('Jmin'), _('Junk packet minimum size.'));
+        o.datatype = 'uinteger';
+        o.placeholder = '0';
+        o.optional = true;
 
-			if (awgOption.validate)
-				o.validate = awgOption.validate;
+        o = s.taboption('amneziawg', form.Value, 'awg_jmax', _('Jmax'), _('Junk packet maximum size.'));
+        o.datatype = 'uinteger';
+        o.placeholder = '0';
+        o.optional = true;
 
-			if (awgOption.placeholder)
-				o.placeholder = awgOption.placeholder;
+		addSettingGroup(s, 'amneziawg', '_awg_group_padding', _('Packet padding'),
+			_('Junk header sizes for handshake, cookie reply and transport packets.'));
 
-			if (awgOption.password)
-				o.password = true;
+        o = s.taboption('amneziawg', form.Value, 'awg_s1', _('S1'), _('Handshake initiation packet junk header size.'));
+        o.datatype = 'uinteger';
+        o.placeholder = '0';
+        o.optional = true;
 
-			if (awgOption.name == 'awg_header_protection_key')
-				s.taboption('amneziawg', cbiHeaderProtectionKeyGenerate, '_gen_header_protection_key', ' ');
-		}
+        o = s.taboption('amneziawg', form.Value, 'awg_s2', _('S2'), _('Handshake response packet junk header size.'));
+        o.datatype = 'uinteger';
+        o.placeholder = '0';
+        o.optional = true;
+		
+		o = s.taboption('amneziawg', form.Value, 'awg_s3', _('S3'), _('Cookie reply packet junk header size.'));
+        o.datatype = 'uinteger';
+        o.placeholder = '0';
+        o.optional = true;
+		
+		o = s.taboption('amneziawg', form.Value, 'awg_s4', _('S4'), _('Transport packet junk header size.'));
+        o.datatype = 'uinteger';
+		o.placeholder = '0';
+        o.optional = true;
+
+		addSettingGroup(s, 'amneziawg', '_awg_group_headers', _('Packet type headers'),
+			_('Packet type values must match the configuration on the remote peer.'));
+
+        o = s.taboption('amneziawg', form.Value, 'awg_h1', _('H1'), _('Handshake initiation packet type header.'));
+		o.validate = validateUint32Range;
+        o.placeholder = '1';
+        o.optional = true;
+
+        o = s.taboption('amneziawg', form.Value, 'awg_h2', _('H2'), _('Handshake response packet type header.'));
+		o.validate = validateUint32Range;
+        o.placeholder = '2';
+        o.optional = true;
+
+        o = s.taboption('amneziawg', form.Value, 'awg_h3', _('H3'), _('Handshake cookie packet type header.'));
+		o.validate = validateUint32Range;
+        o.placeholder = '3';
+        o.optional = true;
+
+        o = s.taboption('amneziawg', form.Value, 'awg_h4', _('H4'), _('Transport packet type header.'));
+		o.validate = validateUint32Range;
+		o.placeholder = '4';
+        o.optional = true;
+
+		addSettingGroup(s, 'amneziawg', '_awg_group_signatures', _('Special packet signatures'),
+			_('Optional signatures for special junk packets.'));
+		
+		o = s.taboption('amneziawg', form.Value, 'awg_i1', _('I1'), _('First special junk packet signature.'));
+        o.datatype = 'string';
+        o.optional = true;
+		
+		o = s.taboption('amneziawg', form.Value, 'awg_i2', _('I2'), _('Second special junk packet signature.'));
+        o.datatype = 'string';
+        o.optional = true;
+		
+		o = s.taboption('amneziawg', form.Value, 'awg_i3', _('I3'), _('Third special junk packet signature.'));
+        o.datatype = 'string';
+        o.optional = true;
+		
+		o = s.taboption('amneziawg', form.Value, 'awg_i4', _('I4'), _('Fourth special junk packet signature.'));
+        o.datatype = 'string';
+        o.optional = true;
+		
+		o = s.taboption('amneziawg', form.Value, 'awg_i5', _('I5'), _('Fifth special junk packet signature.'));
+		o.datatype = 'string';
+        o.optional = true;
+
+		addSettingGroup(s, 'amneziawg', '_awg_group_protection', _('Header protection'),
+			_('AWG 3.x header protection settings. The key and S1-S4 values must match on both sides.'));
+
+		o = s.taboption('amneziawg', form.Value, 'awg_header_protection_key', _('Header Protection Key'), _('AWG 3.x. Base64 key used to protect packet headers. The same key is required on both sides; S1-S4 must each be at least 12.'));
+		o.password = true;
+		o.optional = true;
+		o.validate = function(section_id, value) {
+			var result = validateBase64(section_id, value);
+
+			if (result !== true || !value)
+				return result;
+
+			var paddingOptions = [ 'awg_s1', 'awg_s2', 'awg_s3', 'awg_s4' ];
+			for (var i = 0; i < paddingOptions.length; i++) {
+				var padding = s.formvalue(section_id, paddingOptions[i]) ||
+					uci.get('network', section_id, paddingOptions[i]);
+
+				if (!padding || !padding.match(/^\d+$/) || Number(padding) < 12)
+					return _('Header protection requires S1, S2, S3 and S4 to be at least 12');
+			}
+
+			return true;
+		};
+
+		o = s.taboption('amneziawg', form.Button, '_gen_header_protection_key', _('Generate Header Protection Key'));
+		o.inputtitle = _('Generate key');
+		o.inputstyle = 'apply';
+		o.onclick = function(ev, section_id) {
+			return generateKey().then(function(keypair) {
+				s.getOption('awg_header_protection_key').getUIElement(section_id).setValue(keypair.priv);
+			});
+		};
+
+		o = s.taboption('amneziawg', form.Value, 'awg_content_padding_addition', _('Content Padding Addition'), _('AWG 3.x. Optional random byte padding range added to transport packets.'));
+		o.validate = validateUint16Range;
+		o.placeholder = _('disabled');
+		o.optional = true;
+
+		addSettingGroup(s, 'amneziawg', '_awg_group_timing', _('Handshake timing'),
+			_('Advanced AWG 3.x timing values. Leave them at their defaults unless the peer configuration specifies them.'));
+
+		o = s.taboption('amneziawg', form.Value, 'awg_rekey_after_time', _('Rekey After Time'), _('AWG 3.x. Seconds before initiating a new handshake; accepts a number or range.'));
+		o.validate = validateUint16Range;
+		o.placeholder = _('default');
+		o.optional = true;
+
+		o = s.taboption('amneziawg', form.Value, 'awg_rekey_timeout', _('Rekey Timeout'), _('AWG 3.x. Seconds before retrying a handshake; accepts a number or range.'));
+		o.validate = validateUint16Range;
+		o.placeholder = _('default');
+		o.optional = true;
+
+		o = s.taboption('amneziawg', form.Value, 'awg_reject_after_time', _('Reject After Time'), _('AWG 3.x. Seconds before expiring keys and rejecting traffic; accepts a number or range.'));
+		o.validate = validateUint16Range;
+		o.placeholder = _('default');
+		o.optional = true;
+
+		o = s.taboption('amneziawg', form.Value, 'awg_keepalive_timeout', _('Keepalive Timeout'), _('AWG 3.x. Idle seconds before sending a keepalive; accepts a number or range.'));
+		o.validate = validateUint16Range;
+		o.placeholder = _('default');
+		o.optional = true;
+
+		o = s.taboption('amneziawg', form.Value, 'awg_max_handshake_attempts', _('Maximum Handshake Attempts'), _('AWG 3.x. Maximum handshake retries; accepts a number or range.'));
+		o.validate = validateUint16Range;
+		o.placeholder = _('default');
+		o.optional = true;
+
+		addSettingGroup(s, 'amneziawg', '_awg_group_awg31', _('AWG 3.1 options'),
+			_('Optional traffic-shaping and active-probing resistance settings. Values must match on both sides where noted.'));
+
+		o = s.taboption('amneziawg', form.Flag, 'awg_random_trailers', _('Random Trailers'), _('AWG 3.1. Append a random trailer to packets to vary their sizes. This setting must be identical on both sides.'));
+		o.default = o.disabled;
+		o.optional = true;
+
+		o = s.taboption('amneziawg', form.Flag, 'awg_disable_cookies', _('Disable Cookies'), _('AWG 3.1. Disable WireGuard cookie replies. This reduces an active-probing fingerprint but may prevent new handshakes while the interface is under load.'));
+		o.default = o.disabled;
+		o.optional = true;
 
 		// -- peers -----------------------------------------------------------------------
 
@@ -408,29 +517,43 @@ return network.registerProtocol('amneziawg', {
 		ss.modaltitle = _('Edit peer');
 		ss.sortable = true;
 
-		ss.handleDragConfig = function(ev) {
-			ev.stopPropagation();
-			ev.preventDefault();
-			ev.dataTransfer.dropEffect = 'copy';
-		};
+			ss.handleDragConfig = function(ev) {
+				ev.stopPropagation();
+				ev.preventDefault();
+				ev.dataTransfer.dropEffect = 'copy';
+				ev.currentTarget.classList.add('awg-drag-active');
+			};
 
-		ss.handleDropConfig = function(mode, ev) {
-			var file = ev.dataTransfer.files[0],
-			    nodes = ev.currentTarget,
-			    input = nodes.querySelector('textarea'),
-			    reader = new FileReader();
+			ss.handleDragLeaveConfig = function(ev) {
+				ev.currentTarget.classList.remove('awg-drag-active');
+			};
 
-			if (file) {
+			ss.loadConfigFile = function(nodes, file) {
+				var input = nodes.querySelector('textarea'),
+				    fileName = nodes.querySelector('.awg-import-file'),
+				    reader = new FileReader();
+
+				if (!file)
+					return;
+
 				reader.onload = function(rev) {
 					input.value = rev.target.result.trim();
-					ss.handleApplyConfig(mode, nodes, file.name, ev);
+					nodes.setAttribute('data-filename', file.name);
+					fileName.textContent = _('Selected file: %s').format(file.name);
 				};
 
 				reader.readAsText(file);
-			}
+			};
 
-			ev.stopPropagation();
-			ev.preventDefault();
+			ss.handleDropConfig = function(mode, ev) {
+				var file = ev.dataTransfer.files[0],
+				    nodes = ev.currentTarget;
+
+				nodes.classList.remove('awg-drag-active');
+				this.loadConfigFile(nodes, file);
+
+				ev.stopPropagation();
+				ev.preventDefault();
 		};
 
 		ss.parseConfig = function(data) {
@@ -462,16 +585,16 @@ return network.registerProtocol('amneziawg', {
 			if (config.interface_address) {
 				config.interface_address = config.interface_address.split(/[, ]+/);
 
-				for (let cfia of config.interface_address)
-					if (!stubValidator.apply('ipaddr', cfia))
+				for (var i = 0; i < config.interface_address.length; i++)
+					if (!stubValidator.apply('ipaddr', config.interface_address[i]))
 						return _('Address setting is invalid');
 			}
 
 			if (config.interface_dns) {
 				config.interface_dns = config.interface_dns.split(/[, ]+/);
 
-				for (let cfid of config.interface_dns)
-					if (!stubValidator.apply('ipaddr', cfid, ['nomask']))
+				for (var i = 0; i < config.interface_dns.length; i++)
+					if (!stubValidator.apply('ipaddr', config.interface_dns[i], ['nomask']))
 						return _('DNS setting is invalid');
 			}
 
@@ -481,7 +604,46 @@ return network.registerProtocol('amneziawg', {
 			if (!stubValidator.apply('port', config.interface_listenport || '0'))
 				return _('ListenPort setting is invalid');
 
-			for (let pconf of config.peers) {
+			if (config.interface_headerprotectionkey != null &&
+			    validateBase64(null, config.interface_headerprotectionkey) !== true)
+				return _('HeaderProtectionKey setting is invalid');
+
+			if (config.interface_headerprotectionkey) {
+				var paddingSettings = [ 'interface_s1', 'interface_s2', 'interface_s3', 'interface_s4' ];
+				for (var i = 0; i < paddingSettings.length; i++)
+					if (!config[paddingSettings[i]] || !config[paddingSettings[i]].match(/^\d+$/) ||
+					    Number(config[paddingSettings[i]]) < 12)
+						return _('Header protection requires S1, S2, S3 and S4 to be at least 12');
+			}
+
+			var uint32RangeSettings = [ 'interface_h1', 'interface_h2', 'interface_h3', 'interface_h4' ];
+			for (var i = 0; i < uint32RangeSettings.length; i++)
+				if (config[uint32RangeSettings[i]] != null &&
+				    validateUint32Range(null, config[uint32RangeSettings[i]]) !== true)
+					return _('H1-H4 settings must be valid 32-bit numbers or ranges');
+
+			var uint16RangeSettings = [
+				'interface_contentpaddingaddition',
+				'interface_rekeyaftertime',
+				'interface_rekeytimeout',
+				'interface_rejectaftertime',
+				'interface_keepalivetimeout',
+				'interface_maxhandshakeattempts'
+			];
+			for (var i = 0; i < uint16RangeSettings.length; i++)
+				if (config[uint16RangeSettings[i]] != null &&
+				    validateUint16Range(null, config[uint16RangeSettings[i]]) !== true)
+					return _('AWG 3.x timing and padding settings must be valid 16-bit numbers or ranges');
+
+			var booleanSettings = [ 'interface_randomtrailers', 'interface_disablecookies' ];
+			for (var i = 0; i < booleanSettings.length; i++)
+				if (config[booleanSettings[i]] != null &&
+				    validateAwgBoolean(null, config[booleanSettings[i]]) !== true)
+					return _('AWG 3.1 boolean settings must be "on", "off", or non-negative integers');
+
+			for (var i = 0; i < config.peers.length; i++) {
+				var pconf = config.peers[i];
+
 				if (pconf.peer_publickey != null && validateBase64(null, pconf.peer_publickey) !== true)
 					return _('PublicKey setting is invalid');
 
@@ -511,19 +673,20 @@ return network.registerProtocol('amneziawg', {
 				if (pconf.peer_persistentkeepalive == 'off' || pconf.peer_persistentkeepalive == '0')
 					delete pconf.peer_persistentkeepalive;
 
-				// Since AmneziaWG 3.0 this may also be a `low-high' range
-				if (validateU16Range(null, pconf.peer_persistentkeepalive || '0') !== true)
+				if (validateUint16Range(null, pconf.peer_persistentkeepalive || '0') !== true)
 					return _('PersistentKeepAlive setting is invalid');
 			}
 
 			return config;
 		};
 
-		ss.handleApplyConfig = function(mode, nodes, comment, ev) {
-			const input = nodes.querySelector('textarea').value;
-			const error = nodes.querySelector('.alert-message');
-			const cancel = nodes.nextElementSibling.querySelector('.btn');
-			const config = this.parseConfig(input);
+			ss.handleApplyConfig = function(mode, nodes, comment, ev) {
+				var input = nodes.querySelector('textarea').value,
+				    error = nodes.querySelector('.alert-message'),
+				    cancel = nodes.nextElementSibling.querySelector('.btn'),
+				    config = this.parseConfig(input);
+
+				comment = comment || nodes.getAttribute('data-filename');
 
 			if (typeof(config) == 'string') {
 				error.firstChild.data = _('Cannot parse configuration: %s').format(config);
@@ -532,7 +695,7 @@ return network.registerProtocol('amneziawg', {
 			}
 
 			if (mode == 'full') {
-				const prv = s.formvalue(s.section, 'private_key');
+				var prv = s.formvalue(s.section, 'private_key');
 
 				if (prv && prv != config.interface_privatekey && !confirm(_('Overwrite the current settings with the imported configuration?')))
 					return;
@@ -542,18 +705,38 @@ return network.registerProtocol('amneziawg', {
 					s.getOption('public_key').getUIElement(s.section).setValue(keypair.pub);
 					s.getOption('listen_port').getUIElement(s.section).setValue(config.interface_listenport || '');
 					s.getOption('addresses').getUIElement(s.section).setValue(config.interface_address);
-
-					for (let awgOption of awgOptions) {
-						const imported = config['interface_' + awgOption.key.toLowerCase()] || '';
-						s.getOption(awgOption.name).getUIElement(s.section).setValue(
-							awgOption.flag ? awgFlagToUci(imported) : imported);
-					}
+					s.getOption('awg_jc').getUIElement(s.section).setValue(config.interface_jc || '');
+					s.getOption('awg_jmin').getUIElement(s.section).setValue(config.interface_jmin || '');
+					s.getOption('awg_jmax').getUIElement(s.section).setValue(config.interface_jmax || '');
+					s.getOption('awg_s1').getUIElement(s.section).setValue(config.interface_s1 || '');
+					s.getOption('awg_s2').getUIElement(s.section).setValue(config.interface_s2 || '');
+					s.getOption('awg_s3').getUIElement(s.section).setValue(config.interface_s3 || '');
+					s.getOption('awg_s4').getUIElement(s.section).setValue(config.interface_s4 || '');
+					s.getOption('awg_h1').getUIElement(s.section).setValue(config.interface_h1 || '');
+					s.getOption('awg_h2').getUIElement(s.section).setValue(config.interface_h2 || '');
+					s.getOption('awg_h3').getUIElement(s.section).setValue(config.interface_h3 || '');
+					s.getOption('awg_h4').getUIElement(s.section).setValue(config.interface_h4 || '');
+					s.getOption('awg_i1').getUIElement(s.section).setValue(config.interface_i1 || '');
+					s.getOption('awg_i2').getUIElement(s.section).setValue(config.interface_i2 || '');
+					s.getOption('awg_i3').getUIElement(s.section).setValue(config.interface_i3 || '');
+					s.getOption('awg_i4').getUIElement(s.section).setValue(config.interface_i4 || '');
+					s.getOption('awg_i5').getUIElement(s.section).setValue(config.interface_i5 || '');
+					s.getOption('awg_header_protection_key').getUIElement(s.section).setValue(config.interface_headerprotectionkey || '');
+					s.getOption('awg_content_padding_addition').getUIElement(s.section).setValue(config.interface_contentpaddingaddition || '');
+					s.getOption('awg_rekey_after_time').getUIElement(s.section).setValue(config.interface_rekeyaftertime || '');
+					s.getOption('awg_rekey_timeout').getUIElement(s.section).setValue(config.interface_rekeytimeout || '');
+					s.getOption('awg_reject_after_time').getUIElement(s.section).setValue(config.interface_rejectaftertime || '');
+					s.getOption('awg_keepalive_timeout').getUIElement(s.section).setValue(config.interface_keepalivetimeout || '');
+					s.getOption('awg_max_handshake_attempts').getUIElement(s.section).setValue(config.interface_maxhandshakeattempts || '');
+					s.getOption('awg_random_trailers').getUIElement(s.section).setValue(awgBooleanToFlag(config.interface_randomtrailers));
+					s.getOption('awg_disable_cookies').getUIElement(s.section).setValue(awgBooleanToFlag(config.interface_disablecookies));
 
 					if (config.interface_dns)
 						s.getOption('dns').getUIElement(s.section).setValue(config.interface_dns);
 
-					for (let pconf of config.peers) {
-						const sid = uci.add('network', 'amneziawg_' + s.section);
+					for (var i = 0; i < config.peers.length; i++) {
+						var pconf = config.peers[i];
+						var sid = uci.add('network', 'amneziawg_' + s.section);
 
 						uci.sections('network', 'amneziawg_' + s.section, function(peer) {
 							if (peer.public_key == pconf.peer_publickey)
@@ -579,8 +762,8 @@ return network.registerProtocol('amneziawg', {
 			}
 			else {
 				return getPublicAndPrivateKeyFromPrivate(config.interface_privatekey).then(function(keypair) {
-					const sid = uci.add('network', 'amneziawg_' + s.section);
-					const pub = s.formvalue(s.section, 'public_key');
+					var sid = uci.add('network', 'amneziawg_' + s.section);
+					var pub = s.formvalue(s.section, 'public_key');
 
 					uci.sections('network', 'amneziawg_' + s.section, function(peer) {
 						if (peer.public_key == keypair.pub)
@@ -591,12 +774,13 @@ return network.registerProtocol('amneziawg', {
 					uci.set('network', sid, 'public_key', keypair.pub);
 					uci.set('network', sid, 'private_key', keypair.priv);
 
-					for (let pconf of config.peers) {
+					for (var i = 0; i < config.peers.length; i++) {
+						var pconf = config.peers[i];
+
 						if (pconf.peer_publickey == pub) {
 							uci.set('network', sid, 'preshared_key', pconf.peer_presharedkey);
 							uci.set('network', sid, 'allowed_ips', pconf.peer_allowedips);
 							uci.set('network', sid, 'persistent_keepalive', pconf.peer_persistentkeepalive);
-
 							break;
 						}
 					}
@@ -609,26 +793,43 @@ return network.registerProtocol('amneziawg', {
 		};
 
 		ss.handleConfigImport = function(mode) {
-			const mapNode = ss.getActiveModalMap();
-			const headNode = mapNode.parentNode.querySelector('h4');
+			var mapNode = ss.getActiveModalMap(),
+			    headNode = mapNode.parentNode.querySelector('h4'),
+			    parent = this.map;
 
-			const nodes = E('div', {
-				'dragover': this.handleDragConfig,
-				'drop': this.handleDropConfig.bind(this, mode)
-			}, [
-				E([], (mode == 'full') ? [
+				var nodes = E('div', {
+					'class': 'awg-import-panel',
+					'dragover': this.handleDragConfig,
+					'dragleave': this.handleDragLeaveConfig,
+					'drop': this.handleDropConfig.bind(this, mode)
+				}, [
+					E([], (mode == 'full') ? [
 					E('p', _('Drag or paste a valid <em>*.conf</em> file below to configure the local AmneziaWG interface.'))
 				] : [
 					E('p', _('Paste or drag a AmneziaWG configuration (commonly <em>wg0.conf</em>) from another system below to create a matching peer entry allowing that system to connect to the local AmneziaWG interface.')),
 					E('p', _('To configure fully the local AmneziaWG interface from an existing (e.g. provider supplied) configuration file, use the <strong><a class="full-import" href="#">configuration import</a></strong> instead.'))
 				]),
-				E('p', [
-					E('textarea', {
-						'placeholder': (mode == 'full')
-							? _('Paste or drag supplied AmneziaWG configuration file…')
-							: _('Paste or drag AmneziaWG peer configuration (wg0.conf) file…'),
-						'style': 'height:5em;width:100%; white-space:pre'
-					})
+					E('div', { 'class': 'awg-import-actions' }, [
+						E('label', { 'class': 'btn cbi-button' }, [
+							_('Choose .conf file…'),
+							E('input', {
+								'type': 'file',
+								'accept': '.conf,text/plain',
+								'style': 'display:none',
+								'change': function(ev) {
+									ss.loadConfigFile(nodes, ev.currentTarget.files[0]);
+								}
+							})
+						]),
+						E('span', { 'class': 'awg-import-file' }, [ _('No file selected') ])
+					]),
+					E('p', [
+						E('textarea', {
+							'class': 'awg-import-textarea',
+							'placeholder': (mode == 'full')
+								? _('Paste or drag supplied AmneziaWG configuration file…')
+								: _('Paste or drag AmneziaWG peer configuration (wg0.conf) file…')
+						})
 				]),
 				E('div', {
 					'class': 'alert-message',
@@ -636,7 +837,7 @@ return network.registerProtocol('amneziawg', {
 				}, [''])
 			]);
 
-			const cancelFn = function() {
+			var cancelFn = function() {
 				nodes.parentNode.removeChild(nodes.nextSibling);
 				nodes.parentNode.removeChild(nodes);
 				mapNode.classList.remove('hidden');
@@ -646,7 +847,7 @@ return network.registerProtocol('amneziawg', {
 				window.removeEventListener('drop', handleWindowDragDropIgnore);
 			};
 
-			const a = nodes.querySelector('a.full-import');
+			var a = nodes.querySelector('a.full-import');
 
 			if (a) {
 				a.addEventListener('click', ui.createHandlerFn(this, function(mode) {
@@ -681,7 +882,7 @@ return network.registerProtocol('amneziawg', {
 		};
 
 		ss.renderSectionAdd = function(/* ... */) {
-			const nodes = this.super('renderSectionAdd', arguments);
+			var nodes = this.super('renderSectionAdd', arguments);
 
 			nodes.appendChild(E('button', {
 				'class': 'btn',
@@ -706,14 +907,14 @@ return network.registerProtocol('amneziawg', {
 		o.optional = true;
 		o.width = '30%';
 		o.textvalue = function(section_id) {
-			const dis = ss.getOption('disabled');
-			const pub = ss.getOption('public_key');
-			const prv = ss.getOption('private_key');
-			const psk = ss.getOption('preshared_key');
-			const name = this.cfgvalue(section_id);
-			const key = pub.cfgvalue(section_id);
+			var dis = ss.getOption('disabled'),
+			    pub = ss.getOption('public_key'),
+			    prv = ss.getOption('private_key'),
+			    psk = ss.getOption('preshared_key'),
+			    name = this.cfgvalue(section_id),
+			    key = pub.cfgvalue(section_id);
 
-			const desc = [
+			var desc = [
 				E('p', [
 					name ? E('span', [ name ]) : E('em', [ _('Untitled peer') ])
 				])
@@ -762,8 +963,8 @@ return network.registerProtocol('amneziawg', {
 		};
 
 		function handleKeyChange(ev, section_id, value) {
-			const prv = this.section.getUIElement(section_id, 'private_key');
-			const btn = this.map.findElement('.btn.qr-code');
+			var prv = this.section.getUIElement(section_id, 'private_key'),
+			    btn = this.map.findElement('.btn.qr-code');
 
 			btn.disabled = (!prv.isValid() || !prv.getValue());
 		}
@@ -807,8 +1008,8 @@ return network.registerProtocol('amneziawg', {
 		o = ss.option(form.DynamicList, 'allowed_ips', _('Allowed IPs'), _("Optional. IP addresses and prefixes that this peer is allowed to use inside the tunnel. Usually the peer's tunnel IP addresses and the networks the peer routes through the tunnel."));
 		o.datatype = 'ipaddr';
 		o.textvalue = function(section_id) {
-			const ips = L.toArray(this.cfgvalue(section_id));
-			const list = [];
+			var ips = L.toArray(this.cfgvalue(section_id)),
+			    list = [];
 
 			for (var i = 0; i < ips.length; i++) {
 				if (i > 7) {
@@ -846,8 +1047,8 @@ return network.registerProtocol('amneziawg', {
 		o.placeholder = 'vpn.example.com';
 		o.datatype = 'host';
 		o.textvalue = function(section_id) {
-			const host = this.cfgvalue(section_id);
-			const port = this.section.cfgvalue(section_id, 'endpoint_port');
+			var host = this.cfgvalue(section_id),
+			    port = this.section.cfgvalue(section_id, 'endpoint_port');
 
 			return (host && port)
 				? '%h:%d'.format(host, port)
@@ -863,10 +1064,12 @@ return network.registerProtocol('amneziawg', {
 		o.placeholder = '51820';
 		o.datatype = 'port';
 
-		o = ss.option(form.Value, 'persistent_keepalive', _('Persistent Keep Alive'), _('Optional. Seconds between keep alive messages. Default is 0 (disabled). Recommended value if this device is behind a NAT is 25. Since AmneziaWG 3.0 a <em>low-high</em> range such as <code>25-30</code> is accepted as well, in which case the interval is randomized within these bounds.'));
+		o = ss.option(form.Value, 'persistent_keepalive', _('Persistent Keep Alive'), _('Optional. Seconds between keep alive messages. AWG 3.x accepts a range such as 20-30. Default is 0 (disabled).'));
 		o.modalonly = true;
-		o.validate = validateU16Range;
+		o.validate = validateUint16Range;
 		o.placeholder = '0';
+
+
 
 		o = ss.option(form.DummyValue, '_keyops', _('Configuration Export'),
 			_('Generates a configuration suitable for import on a AmneziaWG peer'));
@@ -874,25 +1077,37 @@ return network.registerProtocol('amneziawg', {
 		o.modalonly = true;
 
 		o.createPeerConfig = function(section_id, endpoint, ips, eips, dns) {
-			const pub = s.formvalue(s.section, 'public_key');
-			const port = s.formvalue(s.section, 'listen_port') || '51820';
-			const prv = this.section.formvalue(section_id, 'private_key');
-			const psk = this.section.formvalue(section_id, 'preshared_key');
-			const eport = this.section.formvalue(section_id, 'endpoint_port');
-			const keep = this.section.formvalue(section_id, 'persistent_keepalive');
-
-			const awg = awgOptions.map(function(awgOption) {
-				const value = s.formvalue(s.section, awgOption.name);
-
-				if (awgOption.flag)
-					return (value == '1')
-						? '%s = %s'.format(awgOption.key, awgFlagToConfig(value))
-						: '# %s not defined'.format(awgOption.key);
-
-				return value
-					? '%s = %s'.format(awgOption.key, value)
-					: '# %s not defined'.format(awgOption.key);
-			});
+			var pub = s.formvalue(s.section, 'public_key'),
+			    port = s.formvalue(s.section, 'listen_port') || '51820',
+				jc = s.formvalue(s.section, 'awg_jc'),
+				jmin = s.formvalue(s.section, 'awg_jmin'),
+				jmax = s.formvalue(s.section, 'awg_jmax'),
+				s1 = s.formvalue(s.section, 'awg_s1'),
+				s2 = s.formvalue(s.section, 'awg_s2'),
+				s3 = s.formvalue(s.section, 'awg_s3'),
+				s4 = s.formvalue(s.section, 'awg_s4'),
+				h1 = s.formvalue(s.section, 'awg_h1'),
+				h2 = s.formvalue(s.section, 'awg_h2'),
+				h3 = s.formvalue(s.section, 'awg_h3'),
+				h4 = s.formvalue(s.section, 'awg_h4'),
+				i1 = s.formvalue(s.section, 'awg_i1'),
+				i2 = s.formvalue(s.section, 'awg_i2'),
+				i3 = s.formvalue(s.section, 'awg_i3'),
+				i4 = s.formvalue(s.section, 'awg_i4'),
+				i5 = s.formvalue(s.section, 'awg_i5'),
+				headerProtectionKey = s.formvalue(s.section, 'awg_header_protection_key'),
+				contentPaddingAddition = s.formvalue(s.section, 'awg_content_padding_addition'),
+				rekeyAfterTime = s.formvalue(s.section, 'awg_rekey_after_time'),
+				rekeyTimeout = s.formvalue(s.section, 'awg_rekey_timeout'),
+				rejectAfterTime = s.formvalue(s.section, 'awg_reject_after_time'),
+				keepaliveTimeout = s.formvalue(s.section, 'awg_keepalive_timeout'),
+				maxHandshakeAttempts = s.formvalue(s.section, 'awg_max_handshake_attempts'),
+				randomTrailers = s.formvalue(s.section, 'awg_random_trailers'),
+				disableCookies = s.formvalue(s.section, 'awg_disable_cookies'),
+			    prv = this.section.formvalue(section_id, 'private_key'),
+			    psk = this.section.formvalue(section_id, 'preshared_key'),
+			    eport = this.section.formvalue(section_id, 'endpoint_port'),
+			    keep = this.section.formvalue(section_id, 'persistent_keepalive');
 
 			// If endpoint is IPv6 we must escape it with []
 			if (endpoint.indexOf(':') > 0) {
@@ -905,23 +1120,47 @@ return network.registerProtocol('amneziawg', {
 				eips && eips.length ? 'Address = ' + eips.join(', ') : '# Address not defined',
 				eport ? 'ListenPort = ' + eport : '# ListenPort not defined',
 				dns && dns.length ? 'DNS = ' + dns.join(', ') : '# DNS not defined',
-				...awg,
+				jc ? 'Jc = ' + jc : '# Jc not defined',
+				jmin ? 'Jmin = ' + jmin : '# Jmin not defined',
+				jmax ? 'Jmax = ' + jmax : '# Jmax not defined',
+				s1 ? 'S1 = ' + s1 : '# S1 not defined',
+				s2 ? 'S2 = ' + s2 : '# S2 not defined',
+				s3 ? 'S3 = ' + s3 : '# S3 not defined',
+				s4 ? 'S4 = ' + s4 : '# S4 not defined',
+				h1 ? 'H1 = ' + h1 : '# H1 not defined',
+				h2 ? 'H2 = ' + h2 : '# H2 not defined',
+				h3 ? 'H3 = ' + h3 : '# H3 not defined',
+				h4 ? 'H4 = ' + h4 : '# H4 not defined',
+				i1 ? 'I1 = ' + i1 : '# I1 not defined',
+				i2 ? 'I2 = ' + i2 : '# I2 not defined',
+				i3 ? 'I3 = ' + i3 : '# I3 not defined',
+				i4 ? 'I4 = ' + i4 : '# I4 not defined',
+				i5 ? 'I5 = ' + i5 : '# I5 not defined',
+				headerProtectionKey ? 'HeaderProtectionKey = ' + headerProtectionKey : '# HeaderProtectionKey not defined',
+				contentPaddingAddition ? 'ContentPaddingAddition = ' + contentPaddingAddition : '# ContentPaddingAddition not defined',
+				rekeyAfterTime ? 'RekeyAfterTime = ' + rekeyAfterTime : '# RekeyAfterTime not defined',
+				rekeyTimeout ? 'RekeyTimeout = ' + rekeyTimeout : '# RekeyTimeout not defined',
+				rejectAfterTime ? 'RejectAfterTime = ' + rejectAfterTime : '# RejectAfterTime not defined',
+				keepaliveTimeout ? 'KeepaliveTimeout = ' + keepaliveTimeout : '# KeepaliveTimeout not defined',
+				maxHandshakeAttempts ? 'MaxHandshakeAttempts = ' + maxHandshakeAttempts : '# MaxHandshakeAttempts not defined',
+				randomTrailers != null ? 'RandomTrailers = ' + awgBooleanToConfig(randomTrailers) : '# RandomTrailers not defined',
+				disableCookies != null ? 'DisableCookies = ' + awgBooleanToConfig(disableCookies) : '# DisableCookies not defined',
 				'',
 				'[Peer]',
 				'PublicKey = ' + pub,
 				psk ? 'PresharedKey = ' + psk : '# PresharedKey not used',
 				ips && ips.length ? 'AllowedIPs = ' + ips.join(', ') : '# AllowedIPs not defined',
 				endpoint ? 'Endpoint = ' + endpoint + ':' + port : '# Endpoint not defined',
-				keep ? 'PersistentKeepAlive = ' + keep : '# PersistentKeepAlive not defined'
+				keep ? 'PersistentKeepalive = ' + keep : '# PersistentKeepalive not defined'
 			].join('\n');
 		};
 
 		o.handleGenerateQR = function(section_id, ev) {
-			const mapNode = ss.getActiveModalMap();
-			const headNode = mapNode.parentNode.querySelector('h4');
-			const configGenerator = this.createPeerConfig.bind(this, section_id);
-			const parent = this.map;
-			const eips = this.section.formvalue(section_id, 'allowed_ips');
+			var mapNode = ss.getActiveModalMap(),
+			    headNode = mapNode.parentNode.querySelector('h4'),
+			    configGenerator = this.createPeerConfig.bind(this, section_id),
+			    parent = this.map,
+				eips = this.section.formvalue(section_id, 'allowed_ips');
 
 			return Promise.all([
 				network.getWANNetworks(),
@@ -930,8 +1169,8 @@ return network.registerProtocol('amneziawg', {
 				L.resolveDefault(uci.load('ddns')),
 				L.resolveDefault(uci.load('system')),
 				parent.save(null, true)
-			]).then(function([wNets, w6Nets, lnet]) {
-				const hostnames = [];
+			]).then(function(data) {
+				var hostnames = [];
 
 				uci.sections('ddns', 'service', function(s) {
 					if (typeof(s?.lookup_host) == 'string' && s?.enabled == '1')
@@ -943,37 +1182,38 @@ return network.registerProtocol('amneziawg', {
 						hostnames.push(s.hostname);
 				});
 
-				for (let wNet of wNets)
-					hostnames.push.apply(hostnames, wNet.getIPAddrs().map(function(ip) { return ip.split('/')[0] }));
+				for (var i = 0; i < data[0].length; i++)
+					hostnames.push.apply(hostnames, data[0][i].getIPAddrs().map(function(ip) { return ip.split('/')[0] }));
 
-				for (let w6Net of w6Nets)
-					hostnames.push.apply(hostnames, w6Net.getIP6Addrs().map(function(ip) { return ip.split('/')[0] }));
+				for (var i = 0; i < data[1].length; i++)
+					hostnames.push.apply(hostnames, data[1][i].getIP6Addrs().map(function(ip) { return ip.split('/')[0] }));
 
-				const ips = [ '0.0.0.0/0', '::/0' ];
+				var ips = [ '0.0.0.0/0', '::/0' ];
 
-				const dns = [];
+				var dns = [];
 
-				if (lnet) {
-					const lanIp = lnet.getIPAddr();
+				var lan = data[2];
+				if (lan) {
+					var lanIp = lan.getIPAddr();
 					if (lanIp) {
 						dns.unshift(lanIp)
 					}
 				}
 
-				let qrm, qrs, qro;
+				var qrm, qrs, qro;
 
-				qrm = new form.JSONMap({ config: { endpoint: hostnames[0] || '', allowed_ips: ips, addresses: eips, dns_servers: dns } }, null, _('The generated configuration can be imported into an AmneziaWG client application to set up a connection towards this device.'));
+				qrm = new form.JSONMap({ config: { endpoint: hostnames[0], allowed_ips: ips, addresses: eips, dns_servers: dns } }, null, _('The generated configuration can be imported into a WireGuard client application to set up a connection towards this device.'));
 				qrm.parent = parent;
 
 				qrs = qrm.section(form.NamedSection, 'config');
 
-				function handleConfigChange(ev, section_id, value) {
-					const code = this.map.findElement('.qr-code');
-					const conf = this.map.findElement('.client-config');
-					const endpoint = this.section.getUIElement(section_id, 'endpoint');
-					const ips = this.section.getUIElement(section_id, 'allowed_ips');
-					const eips = this.section.getUIElement(section_id, 'addresses');
-					const dns = this.section.getUIElement(section_id, 'dns_servers');
+					function handleConfigChange(ev, section_id, value) {
+						var code = this.map.findElement('.qr-code'),
+						    conf = this.map.findElement('.client-config'),
+						    endpoint = this.section.getUIElement(section_id, 'endpoint'),
+						    ips = this.section.getUIElement(section_id, 'allowed_ips'),
+						    eips = this.section.getUIElement(section_id, 'addresses'),
+						    dns = this.section.getUIElement(section_id, 'dns_servers');
 
 					if (this.isValid(section_id)) {
 						conf.firstChild.data = configGenerator(endpoint.getValue(), ips.getValue(), eips.getValue(), dns.getValue());
@@ -994,7 +1234,7 @@ return network.registerProtocol('amneziawg', {
 				ips.forEach(function(ip) { qro.value(ip) });
 				qro.onchange = handleConfigChange;
 
-				qro = qrs.option(form.DynamicList, 'dns_servers', _('DNS Servers'), _('DNS servers for the remote clients using this tunnel to your openwrt device. Some AmneziaWG clients require this to be set.'));
+				qro = qrs.option(form.DynamicList, 'dns_servers', _('DNS Servers'), _('DNS servers for the remote clients using this tunnel to your openwrt device. Some wireguard clients require this to be set.'));
 				qro.datatype = 'ipaddr';
 				qro.default = dns;
 				qro.onchange = handleConfigChange;
@@ -1005,75 +1245,68 @@ return network.registerProtocol('amneziawg', {
 				eips.forEach(function(eip) { qro.value(eip) });
 				qro.onchange = handleConfigChange;
 
-				qro = qrs.option(form.DummyValue, 'output');
-				qro.renderWidget = function() {
-					const peer_config = configGenerator(hostnames[0], ips, eips, dns);
+					qro = qrs.option(form.DummyValue, 'output');
+					qro.renderWidget = function() {
+						var peer_config = configGenerator(hostnames[0], ips, eips, dns);
 
-					const node = E('div', {
-						'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:.5em;width:100%'
-					}, [
-						E('div', {
-							'class': 'qr-code',
-							// Bound the QR code so that even a long AmneziaWG
-							// configuration scales down to fit and never overflows
-							// the page: full width on narrow screens, capped at
-							// 320px next to the textual configuration otherwise.
-							'style': 'text-align:center;flex:0 0 auto;width:min(100%, 320px);max-width:100%'
+						var node = E('div', {
+							'class': 'awg-config-export'
 						}, [
-							E('em', { 'class': 'spinning' }, [ _('Generating QR code…') ])
-						]),
-						E('pre', {
-							'class': 'client-config',
-							'style': 'flex:1;white-space:pre;overflow:auto',
-							'click'(ev) {
-								const sel = window.getSelection();
-								const range = document.createRange();
+							E('div', { 'class': 'alert-message warning awg-export-note' }, [
+								_('This configuration and QR code contain a private key. Keep them secret.')
+							]),
+							E('div', {
+								'class': 'qr-code'
+							}, [
+								E('em', { 'class': 'spinning' }, [ _('Generating QR code…') ])
+							]),
+							E('pre', {
+								'class': 'client-config',
+								'click': function(ev) {
+								var sel = window.getSelection(),
+								    range = document.createRange();
 
 								range.selectNodeContents(ev.currentTarget);
 
 								sel.removeAllRanges();
 								sel.addRange(range);
-							}
-						}, [ peer_config ])
-					]);
+								}
+							}, [ peer_config ]),
+							E('div', { 'class': 'awg-export-actions' }, [
+								E('button', {
+									'class': 'btn cbi-button',
+									'type': 'button',
+									'click': function(ev) {
+										var button = ev.currentTarget,
+										    original = button.textContent,
+										    config = node.querySelector('.client-config').textContent;
 
-					const linkdiv = E('div', {
-						'style': 'width:100%;text-align:center'
-					}, [
-						E('button', {
-							'class': 'btn',
-							'click'(ev) {
-								ev.preventDefault();
+										return copyText(config).then(function() {
+											button.textContent = _('Copied');
+											window.setTimeout(function() { button.textContent = original; }, 1500);
+										}, function() {
+											ui.addNotification(null, E('p', [ _('Unable to copy the configuration.') ]), 'error');
+										});
+									}
+								}, [ _('Copy configuration') ]),
+								E('button', {
+									'class': 'btn cbi-button',
+									'type': 'button',
+									'click': function() {
+										downloadText(node.querySelector('.client-config').textContent, 'amneziawg-peer.conf');
+									}
+								}, [ _('Download .conf') ])
+							])
+						]);
 
-								const blob = new Blob([peer_config], { type: 'text/plain' });
-								const url = URL.createObjectURL(blob);
-								const a = document.createElement('a');
-
-								a.href = url;
-								a.download = 'amneziawg-peer.conf';
-								document.body.appendChild(a);
-								a.click();
-								document.body.removeChild(a);
-								URL.revokeObjectURL(url);
-							}
-						}, [ _('Download peer configuration file') ])
-					]);
-
-					buildSVGQRCode(peer_config, node.firstChild);
-					node.appendChild(linkdiv);
+						buildSVGQRCode(peer_config, node.querySelector('.qr-code'));
 
 					return node;
 				};
 
 				return qrm.render().then(function(nodes) {
-					// stash the current dialogue style (visible)
-					const dStyle = mapNode.style;
-					// hide the current modal window
-					mapNode.style.display = 'none';
-					// stash the current button row style (visible)
-					const bRowStyle = mapNode.nextElementSibling.style;
-					// hide the [ Dismiss | Save ] button row
-					mapNode.nextElementSibling.style.display = 'none';
+					mapNode.classList.add('hidden');
+					mapNode.nextElementSibling.classList.add('hidden');
 
 					headNode.appendChild(E('span', [ ' » ', _('Generate configuration') ]));
 					mapNode.parentNode.appendChild(E([], [
@@ -1083,16 +1316,11 @@ return network.registerProtocol('amneziawg', {
 						}, [
 							E('button', {
 								'class': 'btn',
-								'click'() {
-									// Remove QR code button (row)
+								'click': function() {
 									nodes.parentNode.removeChild(nodes.nextSibling);
-									// Remove QR code form
 									nodes.parentNode.removeChild(nodes);
-									// unhide the WiFi modal dialogue
-									mapNode.style = dStyle;
-									// Revert button row style to visible again
-									mapNode.nextSibling.style = bRowStyle;
-									// Remove the H4 span (») title
+									mapNode.classList.remove('hidden');
+									mapNode.nextSibling.classList.remove('hidden');
 									headNode.removeChild(headNode.lastChild);
 								}
 							}, [ _('Back to peer configuration') ])
@@ -1125,7 +1353,7 @@ return network.registerProtocol('amneziawg', {
 		};
 	},
 
-	deleteConfiguration() {
+	deleteConfiguration: function() {
 		uci.sections('network', 'amneziawg_%s'.format(this.sid), function(s) {
 			uci.remove('network', s['.name']);
 		});
